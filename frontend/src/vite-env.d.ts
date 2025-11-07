@@ -1,0 +1,21 @@
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  readonly VITE_SUPABASE_URL: string
+  readonly VITE_SUPABASE_ANON_KEY: string
+  readonly VITE_API_URL: string
+  readonly VITE_AMAP_KEY: string
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv
+}
+
+declare global {
+  interface Window {
+    AMap: any;
+    webkitSpeechRecognition: any;
+    SpeechRecognition: any;
+  }
+}
+
