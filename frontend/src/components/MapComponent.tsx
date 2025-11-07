@@ -26,7 +26,7 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
 
     const initMap = async () => {
       try {
-        const AMap = (window as any).AMap;
+        let AMap = (window as any).AMap;
         if (!AMap) {
           // Load AMap script
           await new Promise((resolve, reject) => {
@@ -37,9 +37,10 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
             script.onerror = reject;
             document.head.appendChild(script);
           });
+          // Get AMap after script loads
+          AMap = (window as any).AMap;
         }
 
-        const AMap = (window as any).AMap;
         if (!AMap) {
           console.error('Failed to load AMap');
           return;
