@@ -60,7 +60,8 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
               resolve(true);
             };
             
-            script.src = `https://webapi.amap.com/maps?v=2.0&key=${amapKey}&callback=${callbackName}`;
+            // Load AMap with Geocoder plugin
+            script.src = `https://webapi.amap.com/maps?v=2.0&key=${amapKey}&plugin=AMap.Geocoder&callback=${callbackName}`;
             script.async = true;
             script.onerror = () => {
               delete (window as any)[callbackName];
@@ -97,44 +98,56 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
           center: [116.397428, 39.90923], // Default to Beijing
         });
 
-        // Geocode destination to get coordinates
-        const geocoder = new AMap.Geocoder();
-        geocoder.getLocation(destination, (status: string, result: any) => {
-          if (status === 'complete' && result.geocodes.length > 0) {
-            const location = result.geocodes[0].location;
-            mapInstance.current.setCenter([location.lng, location.lat]);
-            mapInstance.current.setZoom(13);
+        // Load Geocoder plugin and use it
+        AMap.plugin('AMap.Geocoder', () => {
+          const geocoder = new AMap.Geocoder({
+            city: '全国', // 城市设为全国，默认会进行全国范围搜索
+          });
 
-            // Add marker for destination
-            new AMap.Marker({
-              position: [location.lng, location.lat],
-              title: destination,
-              map: mapInstance.current,
-            });
-          }
-        });
+          // Geocode destination to get coordinates
+          geocoder.getLocation(destination, (status: string, result: any) => {
+            if (status === 'complete' && result.geocodes && result.geocodes.length > 0) {
+              const location = result.geocodes[0].location;
+              if (location && location.lng && location.lat) {
+                mapInstance.current.setCenter([location.lng, location.lat]);
+                mapInstance.current.setZoom(13);
 
-        // Add markers for activities with coordinates
-        activities.forEach((activity) => {
-          if (activity.coordinates && activity.coordinates.lng && activity.coordinates.lat) {
-            new AMap.Marker({
-              position: [activity.coordinates.lng, activity.coordinates.lat],
-              title: activity.name,
-              map: mapInstance.current,
-            });
-          } else if (activity.location) {
-            // Geocode activity location
-            geocoder.getLocation(activity.location, (status: string, result: any) => {
-              if (status === 'complete' && result.geocodes.length > 0) {
-                const location = result.geocodes[0].location;
+                // Add marker for destination
                 new AMap.Marker({
                   position: [location.lng, location.lat],
-                  title: activity.name,
+                  title: destination,
                   map: mapInstance.current,
                 });
               }
-            });
-          }
+            } else {
+              console.warn('Geocoding failed for destination:', destination, status);
+            }
+          });
+
+          // Add markers for activities with coordinates
+          activities.forEach((activity) => {
+            if (activity.coordinates && activity.coordinates.lng && activity.coordinates.lat) {
+              new AMap.Marker({
+                position: [activity.coordinates.lng, activity.coordinates.lat],
+                title: activity.name,
+                map: mapInstance.current,
+              });
+            } else if (activity.location) {
+              // Geocode activity location
+              geocoder.getLocation(activity.location, (status: string, result: any) => {
+                if (status === 'complete' && result.geocodes && result.geocodes.length > 0) {
+                  const location = result.geocodes[0].location;
+                  if (location && location.lng && location.lat) {
+                    new AMap.Marker({
+                      position: [location.lng, location.lat],
+                      title: activity.name,
+                      map: mapInstance.current,
+                    });
+                  }
+                }
+              });
+            }
+          });
         });
       } catch (error: any) {
         console.error('Map initialization error:', error);
