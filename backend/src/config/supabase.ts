@@ -1,8 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import path from 'path';
 
-// Load environment variables if not already loaded
-dotenv.config();
+// Load environment variables from project root
+// __dirname in dev mode (tsx) is backend/src/config/, so go up three levels to project root
+// In production (compiled), __dirname is backend/dist/config/, so go up three levels as well
+const envPath = path.resolve(__dirname, '../../../.env');
+dotenv.config({ path: envPath });
 
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';

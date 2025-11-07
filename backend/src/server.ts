@@ -3,13 +3,17 @@ import cors from 'cors';
 import path from 'path';
 import dotenv from 'dotenv';
 
+// Load environment variables from project root
+// __dirname in dev mode (tsx) is backend/src/, so go up two levels to project root
+// In production (compiled), __dirname is backend/dist/, so go up two levels as well
+const envPath = path.resolve(__dirname, '../../.env');
+dotenv.config({ path: envPath });
+
 // Import routes
 import authRoutes from './routes/auth';
 import travelRoutes from './routes/travel';
 import voiceRoutes from './routes/voice';
 import expenseRoutes from './routes/expense';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
