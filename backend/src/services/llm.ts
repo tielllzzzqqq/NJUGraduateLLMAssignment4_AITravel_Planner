@@ -8,6 +8,17 @@ interface TravelRequest {
   preferences?: string;
 }
 
+interface ChatCompletionResponse {
+  choices: Array<{
+    message: {
+      content: string;
+    };
+  }>;
+  error?: {
+    message: string;
+  };
+}
+
 interface TravelPlan {
   itinerary: Array<{
     day: number;
@@ -45,7 +56,7 @@ export class LLMService {
     const prompt = this.buildTravelPrompt(request);
     
     try {
-      const response = await axios.post(
+      const response = await axios.post<ChatCompletionResponse>(
         `${this.baseUrl}/chat/completions`,
         {
           model: this.model,
@@ -69,6 +80,10 @@ export class LLMService {
           }
         }
       );
+
+      if (!response.data.choices || !response.data.choices[0]?.message?.content) {
+        throw new Error('Invalid response format from LLM API');
+      }
 
       const content = response.data.choices[0].message.content;
       return this.parseTravelPlan(content, request);
@@ -217,7 +232,7 @@ export class LLMService {
 请只返回一个数字（单位：元），不要包含其他文字。`;
 
     try {
-      const response = await axios.post(
+      const response = await axios.post<ChatCompletionResponse>(
         `${this.baseUrl}/chat/completions`,
         {
           model: this.model,
@@ -237,6 +252,10 @@ export class LLMService {
           }
         }
       );
+
+      if (!response.data.choices || !response.data.choices[0]?.message?.content) {
+        return days * travelers * 500; // Fallback
+      }
 
       const content = response.data.choices[0].message.content;
       const budget = parseInt(content.replace(/[^\d]/g, ''));

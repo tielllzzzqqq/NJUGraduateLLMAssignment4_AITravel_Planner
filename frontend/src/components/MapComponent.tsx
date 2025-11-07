@@ -70,7 +70,7 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
 
         // Add markers for activities with coordinates
         activities.forEach((activity) => {
-          if (activity.coordinates) {
+          if (activity.coordinates && activity.coordinates.lng && activity.coordinates.lat) {
             new AMap.Marker({
               position: [activity.coordinates.lng, activity.coordinates.lat],
               title: activity.name,
