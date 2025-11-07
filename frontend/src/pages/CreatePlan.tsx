@@ -56,6 +56,14 @@ export default function CreatePlan() {
     setLoading(true);
 
     try {
+      console.log('Submitting travel plan:', {
+        destination,
+        days: parseInt(days),
+        budget: parseFloat(budget),
+        travelers: parseInt(travelers),
+        preferences: preferences || voiceText || undefined,
+      });
+
       const { data } = await apiClient.post('/travel/plan', {
         destination,
         days: parseInt(days),
@@ -65,9 +73,18 @@ export default function CreatePlan() {
         voiceInput: voiceText || undefined,
       });
 
+      console.log('Travel plan created:', data);
       navigate(`/plan/${data.plan.id}`);
     } catch (err: any) {
-      setError(err.response?.data?.error || '创建计划失败');
+      console.error('Error creating travel plan:', err);
+      console.error('Error response:', err.response);
+      
+      const errorMessage = err.response?.data?.error || 
+                          err.response?.data?.details || 
+                          err.message || 
+                          '创建计划失败';
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

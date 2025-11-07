@@ -32,20 +32,35 @@ router.post('/plan', authenticate, async (req, res) => {
     const { destination, days, budget, travelers, preferences, voiceInput } = req.body;
     const user = (req as any).user;
 
+    console.log('Creating travel plan:', { destination, days, budget, travelers, userId: user.id });
+
     if (!destination || !days || !budget || !travelers) {
+      console.error('Missing required fields:', { destination, days, budget, travelers });
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
     // Generate travel plan using LLM
-    const plan = await llmService.generateTravelPlan({
-      destination,
-      days: parseInt(days),
-      budget: parseFloat(budget),
-      travelers: parseInt(travelers),
-      preferences: preferences || voiceInput || undefined
-    });
+    console.log('Calling LLM service...');
+    let plan;
+    try {
+      plan = await llmService.generateTravelPlan({
+        destination,
+        days: parseInt(days),
+        budget: parseFloat(budget),
+        travelers: parseInt(travelers),
+        preferences: preferences || voiceInput || undefined
+      });
+      console.log('LLM plan generated successfully');
+    } catch (llmError: any) {
+      console.error('LLM service error:', llmError);
+      return res.status(500).json({ 
+        error: 'Failed to generate travel plan: ' + (llmError.message || 'Unknown error'),
+        details: llmError.response?.data || null
+      });
+    }
 
     // Save to database
+    console.log('Saving to database...');
     const { data, error } = await supabase
       .from('travel_plans')
       .insert({
@@ -63,13 +78,22 @@ router.post('/plan', authenticate, async (req, res) => {
 
     if (error) {
       console.error('Database error:', error);
-      return res.status(500).json({ error: 'Failed to save travel plan' });
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      return res.status(500).json({ 
+        error: 'Failed to save travel plan',
+        details: error.message || error
+      });
     }
 
+    console.log('Travel plan created successfully:', data.id);
     res.json({ plan: data, message: 'Travel plan created successfully' });
   } catch (error: any) {
-    console.error('Error creating travel plan:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Unexpected error creating travel plan:', error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      error: error.message || 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 

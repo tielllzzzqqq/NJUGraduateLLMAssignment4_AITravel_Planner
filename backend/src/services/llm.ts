@@ -55,6 +55,18 @@ export class LLMService {
   async generateTravelPlan(request: TravelRequest): Promise<TravelPlan> {
     const prompt = this.buildTravelPrompt(request);
     
+    if (!this.apiKey) {
+      console.error('DASHSCOPE_API_KEY is not configured');
+      throw new Error('API Key not configured. Please set DASHSCOPE_API_KEY in .env file');
+    }
+
+    if (!this.baseUrl) {
+      console.error('DASHSCOPE_BASE_URL is not configured');
+      throw new Error('Base URL not configured. Please set DASHSCOPE_BASE_URL in .env file');
+    }
+
+    console.log('Calling LLM API:', { baseUrl: this.baseUrl, model: this.model });
+    
     try {
       const response = await axios.post<ChatCompletionResponse>(
         `${this.baseUrl}/chat/completions`,
@@ -77,18 +89,42 @@ export class LLMService {
           headers: {
             'Authorization': `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json'
-          }
+          },
+          timeout: 60000 // 60 seconds timeout
         }
       );
 
+      console.log('LLM API response status:', response.status);
+      console.log('LLM API response data keys:', Object.keys(response.data || {}));
+
       if (!response.data.choices || !response.data.choices[0]?.message?.content) {
+        console.error('Invalid response format:', JSON.stringify(response.data, null, 2));
         throw new Error('Invalid response format from LLM API');
       }
 
       const content = response.data.choices[0].message.content;
+      console.log('LLM response content length:', content.length);
       return this.parseTravelPlan(content, request);
     } catch (error: any) {
-      console.error('LLM API Error:', error.response?.data || error.message);
+      console.error('LLM API Error:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method
+        }
+      });
+      
+      if (error.response?.status === 401) {
+        throw new Error('API Key authentication failed. Please check your DASHSCOPE_API_KEY');
+      } else if (error.response?.status === 429) {
+        throw new Error('API rate limit exceeded. Please try again later');
+      } else if (error.code === 'ECONNABORTED') {
+        throw new Error('Request timeout. The API took too long to respond');
+      }
+      
       throw new Error('Failed to generate travel plan: ' + (error.response?.data?.error?.message || error.message));
     }
   }
