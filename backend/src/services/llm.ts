@@ -66,9 +66,21 @@ export class LLMService {
     }
 
     console.log('Calling LLM API:', { baseUrl: this.baseUrl, model: this.model });
+    console.log('Prompt length:', prompt.length);
     
-    try {
-      const response = await axios.post<ChatCompletionResponse>(
+    // Retry logic for timeout errors
+    const maxRetries = 2;
+    let lastError: any = null;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          console.log(`Retry attempt ${attempt}/${maxRetries}...`);
+          // Wait before retry (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+        }
+        
+        const response = await axios.post<ChatCompletionResponse>(
         `${this.baseUrl}/chat/completions`,
         {
           model: this.model,
@@ -83,14 +95,14 @@ export class LLMService {
             }
           ],
           temperature: 0.7,
-          max_tokens: 4000
+          max_tokens: 2000 // Reduced for faster response
         },
         {
           headers: {
             'Authorization': `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json'
           },
-          timeout: 60000 // 60 seconds timeout
+          timeout: 120000 // 120 seconds timeout for LLM generation
         }
       );
 
@@ -130,45 +142,41 @@ export class LLMService {
   }
 
   private buildTravelPrompt(request: TravelRequest): string {
-    return `请为以下旅行需求生成详细的旅行计划，并以JSON格式返回：
+    // Simplified prompt for faster response
+    return `请为以下旅行需求生成旅行计划，返回JSON格式：
 
 目的地：${request.destination}
 天数：${request.days}天
 预算：${request.budget}元
-同行人数：${request.travelers}人
-旅行偏好：${request.preferences || '无特殊偏好'}
+人数：${request.travelers}人
+偏好：${request.preferences || '无'}
 
-请返回以下格式的JSON：
+返回JSON格式：
 {
   "itinerary": [
     {
       "day": 1,
-      "date": "YYYY-MM-DD",
+      "date": "2024-01-01",
       "activities": [
         {
           "time": "09:00",
           "type": "attraction",
-          "name": "景点名称",
-          "location": "具体地址",
-          "description": "详细描述",
-          "cost": 100,
-          "coordinates": {"lat": 39.9, "lng": 116.4}
+          "name": "景点",
+          "location": "地址",
+          "description": "描述",
+          "cost": 100
         }
       ]
     }
   ],
   "summary": {
     "totalEstimatedCost": 5000,
-    "highlights": ["亮点1", "亮点2"],
-    "tips": ["建议1", "建议2"]
+    "highlights": ["亮点"],
+    "tips": ["建议"]
   }
 }
 
-请确保：
-1. 每天的活动安排合理，不要过于紧凑
-2. 包含交通、景点、餐厅、住宿等各类活动
-3. 费用估算要符合预算范围
-4. 提供具体的地理位置信息（如果可能）`;
+要求：每天3-4个活动，费用合理，JSON格式正确。`;
   }
 
   private parseTravelPlan(content: string, request: TravelRequest): TravelPlan {
