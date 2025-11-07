@@ -28,9 +28,19 @@ const authenticate = async (req: express.Request, res: express.Response, next: e
           headers: {
             Authorization: `Bearer ${token}`
           }
+        },
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false
         }
       }
     );
+    
+    // Set the session to ensure RLS policies recognize the user
+    await userSupabase.auth.setSession({
+      access_token: token,
+      refresh_token: '',
+    } as any);
 
     (req as any).user = user;
     (req as any).userSupabase = userSupabase; // Client with user context for RLS

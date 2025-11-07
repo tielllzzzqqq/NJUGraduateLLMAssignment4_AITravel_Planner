@@ -21,6 +21,7 @@ const authenticate = async (req: express.Request, res: express.Response, next: e
     }
 
     // Create a Supabase client with user's token for RLS
+    // Use the token in the auth header for RLS policies to work
     const userSupabase = createClient(
       process.env.SUPABASE_URL || '',
       process.env.SUPABASE_ANON_KEY || '',
@@ -29,9 +30,19 @@ const authenticate = async (req: express.Request, res: express.Response, next: e
           headers: {
             Authorization: `Bearer ${token}`
           }
+        },
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false
         }
       }
     );
+    
+    // Set the session to ensure RLS policies recognize the user
+    await userSupabase.auth.setSession({
+      access_token: token,
+      refresh_token: '',
+    } as any);
 
     (req as any).user = user;
     (req as any).userSupabase = userSupabase; // Client with user context for RLS
