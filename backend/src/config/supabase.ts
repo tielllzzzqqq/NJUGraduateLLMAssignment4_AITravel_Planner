@@ -3,9 +3,24 @@ import dotenv from 'dotenv';
 import path from 'path';
 
 // Load environment variables from project root
-// __dirname in dev mode (tsx) is backend/src/config/, so go up three levels to project root
-// In production (compiled), __dirname is backend/dist/config/, so go up three levels as well
-const envPath = path.resolve(__dirname, '../../../.env');
+// Backend runs from backend/ directory, so .env is one level up
+// Try multiple paths to handle both dev and production modes
+const possiblePaths = [
+  path.resolve(process.cwd(), '../.env'), // From backend/ directory
+  path.resolve(__dirname, '../../../.env'), // From backend/src/config/ (dev) or backend/dist/config/ (prod)
+  path.resolve(__dirname, '../../.env'), // Fallback
+  path.resolve(process.cwd(), '.env'), // Current directory
+];
+
+let envPath = possiblePaths.find(p => {
+  try {
+    const fs = require('fs');
+    return fs.existsSync(p);
+  } catch {
+    return false;
+  }
+}) || possiblePaths[0]; // Default to first path
+
 const result = dotenv.config({ path: envPath });
 
 if (result.error) {

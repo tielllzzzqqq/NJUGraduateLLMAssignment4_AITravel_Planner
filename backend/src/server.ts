@@ -4,10 +4,30 @@ import path from 'path';
 import dotenv from 'dotenv';
 
 // Load environment variables from project root
-// __dirname in dev mode (tsx) is backend/src/, so go up two levels to project root
-// In production (compiled), __dirname is backend/dist/, so go up two levels as well
-const envPath = path.resolve(__dirname, '../../.env');
-dotenv.config({ path: envPath });
+// Backend runs from backend/ directory, so .env is one level up
+// Try multiple paths to handle both dev and production modes
+const possiblePaths = [
+  path.resolve(process.cwd(), '../.env'), // From backend/ directory
+  path.resolve(__dirname, '../../.env'), // From backend/src/ (dev) or backend/dist/ (prod)
+  path.resolve(process.cwd(), '.env'), // Current directory
+];
+
+let envPath = possiblePaths.find(p => {
+  try {
+    const fs = require('fs');
+    return fs.existsSync(p);
+  } catch {
+    return false;
+  }
+}) || possiblePaths[0]; // Default to first path
+
+const result = dotenv.config({ path: envPath });
+if (result.error) {
+  console.warn('Failed to load .env file:', envPath);
+  console.warn('Tried paths:', possiblePaths);
+} else {
+  console.log('✅ Loaded .env file from:', envPath);
+}
 
 // Import routes
 import authRoutes from './routes/auth';
