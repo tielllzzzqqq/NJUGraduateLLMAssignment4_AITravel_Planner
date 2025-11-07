@@ -133,10 +133,7 @@ ALIBABA_CLOUD_ACCESS_KEY_SECRET=your_access_key_secret
 ALIBABA_CLOUD_ENDPOINT=dashscope.aliyuncs.com
 ```
 
-**注意：** 
-- 请通过环境变量或配置文件设置API密钥，不要提交到代码仓库
-- 如需使用阿里云百炼平台的API密钥，请联系项目维护者获取
-- 密钥应保证至少3个月有效期，供助教批改使用
+
 
 ### 3. 高德地图配置
 
@@ -144,7 +141,7 @@ ALIBABA_CLOUD_ENDPOINT=dashscope.aliyuncs.com
 2. 创建应用并获取 Web 服务 Key
 3. 配置到环境变量 `AMAP_WEB_KEY`
 
-### 4. 科大讯飞配置（可选）
+### 4. 科大讯飞配置
 
 1. 访问 [科大讯飞开放平台](https://www.xfyun.cn/)
 2. 创建应用获取 AppID、API Key 和 API Secret
@@ -345,7 +342,7 @@ MIT License
 
 ---
 
-**项目地址：** [GitHub Repository URL]
+**项目地址：** https://github.com/tielllzzzqqq/NJUGraduateLLMAssignment4_AITravel_Planner
 
 **Docker镜像：** `registry.cn-hangzhou.aliyuncs.com/your_namespace/travel-planner:latest`
 

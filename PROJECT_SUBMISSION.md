@@ -2,10 +2,10 @@
 
 ## GitHub 仓库地址
 
-**请在提交前替换为实际的GitHub仓库地址：**
+**GitHub仓库地址：**
 
 ```
-https://github.com/your-username/travel-planner
+https://github.com/tielllzzzqqq/NJUGraduateLLMAssignment4_AITravel_Planner
 ```
 
 ## Docker 镜像地址
@@ -209,7 +209,7 @@ ALIBABA_CLOUD_ENDPOINT=dashscope.aliyuncs.com
 
 ---
 
-**项目地址**: [GitHub Repository URL]  
+**项目地址**: https://github.com/tielllzzzqqq/NJUGraduateLLMAssignment4_AITravel_Planner  
 **Docker镜像**: `registry.cn-hangzhou.aliyuncs.com/your_namespace/travel-planner:latest`  
 **提交日期**: 2024年
 
