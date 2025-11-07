@@ -81,64 +81,80 @@ export class LLMService {
         }
         
         const response = await axios.post<ChatCompletionResponse>(
-        `${this.baseUrl}/chat/completions`,
-        {
-          model: this.model,
-          messages: [
-            {
-              role: 'system',
-              content: '你是一个专业的旅行规划助手，能够根据用户需求生成详细的旅行计划。请以JSON格式返回结果，确保返回的是有效的JSON对象。'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 2000 // Reduced for faster response
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json'
+          `${this.baseUrl}/chat/completions`,
+          {
+            model: this.model,
+            messages: [
+              {
+                role: 'system',
+                content: '你是一个专业的旅行规划助手，能够根据用户需求生成详细的旅行计划。请以JSON格式返回结果，确保返回的是有效的JSON对象。'
+              },
+              {
+                role: 'user',
+                content: prompt
+              }
+            ],
+            temperature: 0.7,
+            max_tokens: 2000 // Reduced for faster response
           },
-          timeout: 120000 // 120 seconds timeout for LLM generation
+          {
+            headers: {
+              'Authorization': `Bearer ${this.apiKey}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 120000 // 120 seconds timeout for LLM generation
+          }
+        );
+
+        console.log('LLM API response status:', response.status);
+        console.log('LLM API response data keys:', Object.keys(response.data || {}));
+
+        if (!response.data.choices || !response.data.choices[0]?.message?.content) {
+          console.error('Invalid response format:', JSON.stringify(response.data, null, 2));
+          throw new Error('Invalid response format from LLM API');
         }
-      );
 
-      console.log('LLM API response status:', response.status);
-      console.log('LLM API response data keys:', Object.keys(response.data || {}));
-
-      if (!response.data.choices || !response.data.choices[0]?.message?.content) {
-        console.error('Invalid response format:', JSON.stringify(response.data, null, 2));
-        throw new Error('Invalid response format from LLM API');
-      }
-
-      const content = response.data.choices[0].message.content;
-      console.log('LLM response content length:', content.length);
-      return this.parseTravelPlan(content, request);
-    } catch (error: any) {
-      console.error('LLM API Error:', {
-        message: error.message,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        config: {
-          url: error.config?.url,
-          method: error.config?.method
+        const content = response.data.choices[0].message.content;
+        console.log('LLM response content length:', content.length);
+        return this.parseTravelPlan(content, request);
+      } catch (error: any) {
+        lastError = error;
+        console.error(`LLM API Error (attempt ${attempt + 1}/${maxRetries + 1}):`, {
+          message: error.message,
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          code: error.code,
+          data: error.response?.data,
+          config: {
+            url: error.config?.url,
+            method: error.config?.method
+          }
+        });
+        
+        // Don't retry for authentication errors
+        if (error.response?.status === 401) {
+          throw new Error('API Key authentication failed. Please check your DASHSCOPE_API_KEY');
+        } else if (error.response?.status === 429) {
+          throw new Error('API rate limit exceeded. Please try again later');
         }
-      });
-      
-      if (error.response?.status === 401) {
-        throw new Error('API Key authentication failed. Please check your DASHSCOPE_API_KEY');
-      } else if (error.response?.status === 429) {
-        throw new Error('API rate limit exceeded. Please try again later');
-      } else if (error.code === 'ECONNABORTED') {
-        throw new Error('Request timeout. The API took too long to respond');
+        
+        // Retry on timeout or network errors
+        if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT' || error.message === 'Network Error') {
+          if (attempt < maxRetries) {
+            console.log('Timeout/network error, will retry...');
+            continue; // Retry
+          } else {
+            throw new Error('Request timeout after retries. The API took too long to respond. Please try again or check your network connection.');
+          }
+        }
+        
+        // For other errors, don't retry
+        throw new Error('Failed to generate travel plan: ' + (error.response?.data?.error?.message || error.message));
       }
-      
-      throw new Error('Failed to generate travel plan: ' + (error.response?.data?.error?.message || error.message));
     }
+    
+    // Should not reach here, but just in case
+    throw new Error('Failed to generate travel plan after retries: ' + (lastError?.message || 'Unknown error'));
   }
 
   private buildTravelPrompt(request: TravelRequest): string {
