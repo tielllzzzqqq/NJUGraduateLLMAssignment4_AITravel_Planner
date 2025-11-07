@@ -197,17 +197,68 @@ export class LLMService {
 
   private parseTravelPlan(content: string, request: TravelRequest): TravelPlan {
     try {
-      // Try to extract JSON from the response
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      // Clean the content - remove markdown code blocks if present
+      let cleanedContent = content.trim();
+      
+      // Remove markdown code blocks
+      cleanedContent = cleanedContent.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+      
+      // Try to extract JSON from the response - look for the first complete JSON object
+      let jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
+      
       if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return this.validateAndFormatPlan(parsed, request);
+        let jsonString = jsonMatch[0];
+        
+        // Try to fix common JSON issues
+        // Remove trailing commas before closing brackets/braces
+        jsonString = jsonString.replace(/,(\s*[}\]])/g, '$1');
+        
+        // Try to fix incomplete JSON by finding the last complete structure
+        let braceCount = 0;
+        let lastValidIndex = -1;
+        for (let i = 0; i < jsonString.length; i++) {
+          if (jsonString[i] === '{') braceCount++;
+          if (jsonString[i] === '}') braceCount--;
+          if (braceCount === 0 && i > 0) {
+            lastValidIndex = i;
+            break;
+          }
+        }
+        
+        if (lastValidIndex > 0) {
+          jsonString = jsonString.substring(0, lastValidIndex + 1);
+        }
+        
+        try {
+          const parsed = JSON.parse(jsonString);
+          const validated = this.validateAndFormatPlan(parsed, request);
+          console.log('✅ Successfully parsed LLM JSON response');
+          return validated;
+        } catch (parseError: any) {
+          console.warn('JSON parse error, trying to fix:', parseError.message);
+          console.warn('Problematic JSON (first 500 chars):', jsonString.substring(0, 500));
+          
+          // Try to extract just the essential parts
+          try {
+            // Try to find itinerary array
+            const itineraryMatch = jsonString.match(/"itinerary"\s*:\s*\[([\s\S]*?)\]/);
+            if (itineraryMatch) {
+              // Use fallback but log the issue
+              console.warn('Using fallback plan due to JSON parsing error');
+              return this.generateFallbackPlan(request);
+            }
+          } catch (e) {
+            // Ignore
+          }
+        }
       }
       
       // Fallback: generate a basic plan structure
+      console.warn('No valid JSON found in LLM response, using fallback plan');
       return this.generateFallbackPlan(request);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to parse LLM response:', error);
+      console.error('Error details:', error.message);
       return this.generateFallbackPlan(request);
     }
   }
