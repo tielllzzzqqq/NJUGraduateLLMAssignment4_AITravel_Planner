@@ -81,12 +81,12 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 ### 步骤
 
-1. **获取 API 密钥**
+1. **获取 API Key**
    - 访问 https://dashscope.aliyun.com/
    - 登录阿里云账户
    - 进入 "API-KEY 管理"
    - 创建新的 API Key 或使用现有 Key
-   - 复制 `AccessKey ID` 和 `AccessKey Secret`
+   - 复制 API Key（注意：新版本使用 API Key，不再是 AccessKey ID/Secret）
 
 2. **验证服务可用性**
    - 确保账户有足够的余额
@@ -96,10 +96,23 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 在项目根目录的 `.env` 文件中添加：
 ```bash
-ALIBABA_CLOUD_ACCESS_KEY_ID=LTAI5tQxxxxxxxxxxxxx
-ALIBABA_CLOUD_ACCESS_KEY_SECRET=xxxxxxxxxxxxxxxxxxxxx
-ALIBABA_CLOUD_ENDPOINT=dashscope.aliyuncs.com
+# 阿里云百炼平台 API Key（新版本）
+DASHSCOPE_API_KEY=your_api_key_here
+
+# Base URL（可选，默认使用中国地域）
+# 中国地域：https://dashscope.aliyuncs.com/compatible-mode/v1
+# 新加坡地域：https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+
+# 模型名称（可选，默认 qwen-plus）
+# 可选：qwen-plus, qwen-turbo, qwen-max 等
+DASHSCOPE_MODEL=qwen-plus
 ```
+
+**重要提示：**
+- 新版本使用 API Key 方式（兼容 OpenAI 格式）
+- Base URL 使用 `/compatible-mode/v1` 路径
+- 不再需要 AccessKey ID 和 Secret
 
 **重要提示：**
 - 请确保 API Key 至少 3 个月内有效（供助教批改）

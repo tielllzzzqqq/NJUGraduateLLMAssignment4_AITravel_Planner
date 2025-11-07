@@ -30,14 +30,15 @@ interface TravelPlan {
 }
 
 export class LLMService {
-  private accessKeyId: string;
-  private accessKeySecret: string;
-  private endpoint: string;
+  private apiKey: string;
+  private baseUrl: string;
+  private model: string;
 
   constructor() {
-    this.accessKeyId = process.env.ALIBABA_CLOUD_ACCESS_KEY_ID || '';
-    this.accessKeySecret = process.env.ALIBABA_CLOUD_ACCESS_KEY_SECRET || '';
-    this.endpoint = process.env.ALIBABA_CLOUD_ENDPOINT || 'dashscope.aliyuncs.com';
+    this.apiKey = process.env.DASHSCOPE_API_KEY || '';
+    // 默认使用中国地域，如需使用新加坡地域，使用：https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+    this.baseUrl = process.env.DASHSCOPE_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+    this.model = process.env.DASHSCOPE_MODEL || 'qwen-plus';
   }
 
   async generateTravelPlan(request: TravelRequest): Promise<TravelPlan> {
@@ -45,41 +46,35 @@ export class LLMService {
     
     try {
       const response = await axios.post(
-        `https://${this.endpoint}/api/v1/services/aigc/text-generation/generation`,
+        `${this.baseUrl}/chat/completions`,
         {
-          model: 'qwen-turbo',
-          input: {
-            messages: [
-              {
-                role: 'system',
-                content: '你是一个专业的旅行规划助手，能够根据用户需求生成详细的旅行计划。请以JSON格式返回结果，确保返回的是有效的JSON对象。'
-              },
-              {
-                role: 'user',
-                content: prompt
-              }
-            ]
-          },
-          parameters: {
-            temperature: 0.7,
-            max_tokens: 4000
-          }
+          model: this.model,
+          messages: [
+            {
+              role: 'system',
+              content: '你是一个专业的旅行规划助手，能够根据用户需求生成详细的旅行计划。请以JSON格式返回结果，确保返回的是有效的JSON对象。'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 4000
         },
         {
           headers: {
-            'Authorization': `Bearer ${this.accessKeyId}`,
-            'Content-Type': 'application/json',
-            'X-DashScope-SSE': 'disable',
-            'X-DashScope-Async': 'disable'
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json'
           }
         }
       );
 
-      const content = response.data.output.choices[0].message.content;
+      const content = response.data.choices[0].message.content;
       return this.parseTravelPlan(content, request);
     } catch (error: any) {
       console.error('LLM API Error:', error.response?.data || error.message);
-      throw new Error('Failed to generate travel plan: ' + (error.response?.data?.message || error.message));
+      throw new Error('Failed to generate travel plan: ' + (error.response?.data?.error?.message || error.message));
     }
   }
 
@@ -223,31 +218,27 @@ export class LLMService {
 
     try {
       const response = await axios.post(
-        `https://${this.endpoint}/api/v1/services/aigc/text-generation/generation`,
+        `${this.baseUrl}/chat/completions`,
         {
-          model: 'qwen-turbo',
-          input: {
-            messages: [
-              {
-                role: 'user',
-                content: prompt
-              }
-            ]
-          },
-          parameters: {
-            temperature: 0.3,
-            max_tokens: 100
-          }
+          model: this.model,
+          messages: [
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.3,
+          max_tokens: 100
         },
         {
           headers: {
-            'Authorization': `Bearer ${this.accessKeyId}`,
+            'Authorization': `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json'
           }
         }
       );
 
-      const content = response.data.output.choices[0].message.content;
+      const content = response.data.choices[0].message.content;
       const budget = parseInt(content.replace(/[^\d]/g, ''));
       return isNaN(budget) ? days * travelers * 500 : budget;
     } catch (error) {

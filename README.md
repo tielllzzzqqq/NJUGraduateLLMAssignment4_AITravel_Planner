@@ -125,13 +125,31 @@ VITE_AMAP_KEY=your_amap_web_key
 
 **重要：API密钥配置说明**
 
+1. 访问 [阿里云百炼平台](https://dashscope.aliyun.com/)
+2. 登录后进入 "API-KEY 管理"
+3. 创建新的 API Key 或使用现有 Key
+4. 复制 API Key
+
 请在 `.env` 文件中配置以下环境变量：
 
 ```
-ALIBABA_CLOUD_ACCESS_KEY_ID=your_access_key_id
-ALIBABA_CLOUD_ACCESS_KEY_SECRET=your_access_key_secret
-ALIBABA_CLOUD_ENDPOINT=dashscope.aliyuncs.com
+# 阿里云百炼平台 API Key（新版本使用）
+DASHSCOPE_API_KEY=your_api_key_here
+
+# Base URL（可选，默认使用中国地域）
+# 中国地域：https://dashscope.aliyuncs.com/compatible-mode/v1
+# 新加坡地域：https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+
+# 模型名称（可选，默认使用 qwen-plus）
+# 可选模型：qwen-plus, qwen-turbo, qwen-max 等
+DASHSCOPE_MODEL=qwen-plus
 ```
+
+**注意：** 
+- 新版本使用 API Key 方式，不再需要 AccessKey ID 和 Secret
+- Base URL 使用兼容 OpenAI 的格式：`/compatible-mode/v1`
+- 确保 API Key 至少 3 个月内有效（供助教批改使用）
 
 
 
