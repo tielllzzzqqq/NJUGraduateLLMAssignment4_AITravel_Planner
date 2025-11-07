@@ -22,32 +22,140 @@ export default function CreatePlan() {
   };
 
   const parseVoiceInput = (text: string) => {
-    // Simple parsing logic - can be enhanced
-    const destinationMatch = text.match(/(?:去|到|前往)([^，,，\d]+?)(?:，|,|$|\d)/);
-    if (destinationMatch) setDestination(destinationMatch[1].trim());
-
-    const daysMatch = text.match(/(\d+)\s*天/);
-    if (daysMatch) setDays(daysMatch[1]);
-
-    const budgetMatch = text.match(/(\d+)\s*[万元元]/);
-    if (budgetMatch) {
-      const amount = parseInt(budgetMatch[1]);
-      setBudget((amount * (budgetMatch[0].includes('万') ? 10000 : 1)).toString());
+    console.log('Parsing voice input:', text);
+    
+    // 改进的目的地匹配 - 支持更多表达方式
+    const destinationPatterns = [
+      /(?:去|到|前往|想去|计划去|准备去)([^，,，\d天万元人]+?)(?:，|,|$|\d|天|万|元|人)/,
+      /(?:目的地是|要去)([^，,，\d天万元人]+?)(?:，|,|$|\d|天|万|元|人)/,
+      /^([^，,，\d天万元人]+?)(?:，|,|$|\d|天|万|元|人)/, // 如果开头就是地名
+    ];
+    
+    for (const pattern of destinationPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        const dest = match[1].trim();
+        // 过滤掉常见的中文词汇
+        if (dest && !['我', '想', '要', '准备', '计划', '带', '喜欢', '和', '的'].includes(dest)) {
+          setDestination(dest);
+          break;
+        }
+      }
     }
 
-    const travelersMatch = text.match(/(\d+)\s*人/);
-    if (travelersMatch) setTravelers(travelersMatch[1]);
+    // 改进的天数匹配
+    const daysPatterns = [
+      /(\d+)\s*天/,
+      /(\d+)\s*日/,
+      /(\d+)\s*晚/,
+      /玩\s*(\d+)\s*天/,
+      /待\s*(\d+)\s*天/,
+    ];
+    
+    for (const pattern of daysPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        const days = parseInt(match[1]);
+        if (days > 0 && days < 365) {
+          setDays(days.toString());
+          break;
+        }
+      }
+    }
 
-    // Set preferences
-    if (text.includes('美食') || text.includes('吃')) {
-      setPreferences(prev => prev ? prev + '，美食' : '美食');
+    // 改进的预算匹配
+    const budgetPatterns = [
+      /(\d+)\s*万\s*元?/,
+      /(\d+)\s*万元/,
+      /预算\s*(\d+)\s*[万元元]/,
+      /(\d+)\s*元/,
+      /(\d{4,})\s*块/,
+    ];
+    
+    for (const pattern of budgetPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        const amount = parseInt(match[1]);
+        if (amount > 0) {
+          // 判断单位
+          if (match[0].includes('万')) {
+            setBudget((amount * 10000).toString());
+          } else if (amount < 1000) {
+            // 可能是万元，但没说"万"
+            setBudget((amount * 10000).toString());
+          } else {
+            setBudget(amount.toString());
+          }
+          break;
+        }
+      }
     }
-    if (text.includes('动漫') || text.includes('动画')) {
-      setPreferences(prev => prev ? prev + '，动漫' : '动漫');
+
+    // 改进的人数匹配
+    const travelersPatterns = [
+      /(\d+)\s*人/,
+      /(\d+)\s*个\s*人/,
+      /(\d+)\s*位/,
+      /(\d+)\s*名/,
+      /带\s*(\d+)\s*个/,
+      /(\d+)\s*个\s*朋友/,
+    ];
+    
+    for (const pattern of travelersPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        const travelers = parseInt(match[1]);
+        if (travelers > 0 && travelers < 100) {
+          setTravelers(travelers.toString());
+          break;
+        }
+      }
     }
-    if (text.includes('孩子') || text.includes('儿童')) {
-      setPreferences(prev => prev ? prev + '，带孩子' : '带孩子');
+
+    // 改进的偏好提取
+    const preferences: string[] = [];
+    
+    // 美食相关
+    if (text.match(/美食|吃|餐厅|小吃|特色菜|料理|火锅|烧烤|海鲜/)) {
+      preferences.push('美食');
     }
+    
+    // 动漫相关
+    if (text.match(/动漫|动画|二次元|手办|秋叶原|动漫展/)) {
+      preferences.push('动漫');
+    }
+    
+    // 带孩子
+    if (text.match(/孩子|儿童|小朋友|小孩|亲子|带娃/)) {
+      preferences.push('带孩子');
+    }
+    
+    // 购物
+    if (text.match(/购物|买|shopping|商场|免税店/)) {
+      preferences.push('购物');
+    }
+    
+    // 自然风景
+    if (text.match(/自然|风景|山水|海滩|海岛|公园/)) {
+      preferences.push('自然风景');
+    }
+    
+    // 历史文化
+    if (text.match(/历史|文化|古迹|博物馆|寺庙|古建筑/)) {
+      preferences.push('历史文化');
+    }
+    
+    // 娱乐
+    if (text.match(/娱乐|游乐园|主题公园|表演|演出/)) {
+      preferences.push('娱乐');
+    }
+    
+    if (preferences.length > 0) {
+      setPreferences(preferences.join('，'));
+    }
+    
+    // 注意：这里不能直接使用state变量，因为它们可能还没更新
+    // 解析结果会通过setState更新，可以在下次渲染时看到
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
