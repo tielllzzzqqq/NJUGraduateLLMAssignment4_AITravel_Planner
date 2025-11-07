@@ -1,6 +1,7 @@
 import express from 'express';
-import { supabase } from '../config/supabase';
+import { supabase, supabaseAdmin } from '../config/supabase';
 import { llmService } from '../services/llm';
+import { createClient } from '@supabase/supabase-js';
 
 const router = express.Router();
 
@@ -19,7 +20,21 @@ const authenticate = async (req: express.Request, res: express.Response, next: e
       return res.status(401).json({ error: 'Invalid token' });
     }
 
+    // Create a Supabase client with user's token for RLS
+    const userSupabase = createClient(
+      process.env.SUPABASE_URL || '',
+      process.env.SUPABASE_ANON_KEY || '',
+      {
+        global: {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      }
+    );
+
     (req as any).user = user;
+    (req as any).userSupabase = userSupabase; // Client with user context for RLS
     next();
   } catch (error: any) {
     res.status(401).json({ error: error.message });
@@ -61,7 +76,9 @@ router.post('/plan', authenticate, async (req, res) => {
 
     // Save to database
     console.log('Saving to database...');
-    const { data, error } = await supabase
+    // Use userSupabase client with user's token for RLS
+    const userSupabase = (req as any).userSupabase || supabaseAdmin;
+    const { data, error } = await userSupabase
       .from('travel_plans')
       .insert({
         user_id: user.id,
@@ -101,8 +118,9 @@ router.post('/plan', authenticate, async (req, res) => {
 router.get('/plans', authenticate, async (req, res) => {
   try {
     const user = (req as any).user;
+    const userSupabase = (req as any).userSupabase || supabaseAdmin;
 
-    const { data, error } = await supabase
+    const { data, error } = await userSupabase
       .from('travel_plans')
       .select('*')
       .eq('user_id', user.id)
@@ -123,8 +141,9 @@ router.get('/plans/:id', authenticate, async (req, res) => {
   try {
     const user = (req as any).user;
     const { id } = req.params;
+    const userSupabase = (req as any).userSupabase || supabaseAdmin;
 
-    const { data, error } = await supabase
+    const { data, error } = await userSupabase
       .from('travel_plans')
       .select('*')
       .eq('id', id)
@@ -147,8 +166,9 @@ router.put('/plans/:id', authenticate, async (req, res) => {
     const user = (req as any).user;
     const { id } = req.params;
     const updates = req.body;
+    const userSupabase = (req as any).userSupabase || supabaseAdmin;
 
-    const { data, error } = await supabase
+    const { data, error } = await userSupabase
       .from('travel_plans')
       .update(updates)
       .eq('id', id)
@@ -171,8 +191,9 @@ router.delete('/plans/:id', authenticate, async (req, res) => {
   try {
     const user = (req as any).user;
     const { id } = req.params;
+    const userSupabase = (req as any).userSupabase || supabaseAdmin;
 
-    const { error } = await supabase
+    const { error } = await userSupabase
       .from('travel_plans')
       .delete()
       .eq('id', id)
