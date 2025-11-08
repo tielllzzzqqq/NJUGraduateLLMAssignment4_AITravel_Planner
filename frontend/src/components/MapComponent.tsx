@@ -134,9 +134,18 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
 
         // Load plugins and initialize map
         AMap.plugin(['AMap.Geocoder', 'AMap.Driving'], () => {
+          console.log('MapComponent: Plugins loaded, creating Geocoder');
           const geocoder = new AMap.Geocoder({
             city: '全国', // 城市设为全国，默认会进行全国范围搜索
+            radius: 1000, // 搜索半径，单位米
           });
+          console.log('MapComponent: Geocoder created:', geocoder);
+          
+          // Test geocoder is working
+          if (!geocoder || typeof geocoder.getLocation !== 'function') {
+            console.error('MapComponent: Geocoder is not properly initialized');
+            return;
+          }
 
           // Geocode all locations and then draw route
           const geocodePromises: Promise<void>[] = [];
@@ -144,26 +153,47 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
           // First, geocode destination to set map center
           const destinationPromise = new Promise<void>((resolve) => {
             console.log('MapComponent: Geocoding destination:', destination);
-            geocoder.getLocation(destination, (status: string, result: any) => {
-              console.log('MapComponent: Destination geocoding result:', status, result);
-              if (status === 'complete' && result.geocodes && result.geocodes.length > 0) {
-                const location = result.geocodes[0].location;
-                if (location && location.lng && location.lat) {
-                  destinationLocation = { lng: location.lng, lat: location.lat };
-                  console.log('MapComponent: Destination location found:', destinationLocation);
-                  // Set map center to destination
-                  mapInstance.current.setCenter([location.lng, location.lat]);
-                  mapInstance.current.setZoom(13);
-                  resolve();
+            
+            // Add timeout to prevent hanging
+            const timeoutId = setTimeout(() => {
+              console.warn('MapComponent: Destination geocoding timeout');
+              resolve();
+            }, 10000); // 10 second timeout
+            
+            try {
+              geocoder.getLocation(destination, (status: string, result: any) => {
+                clearTimeout(timeoutId);
+                console.log('MapComponent: Destination geocoding result:', status, result);
+                
+                if (status === 'complete' && result && result.geocodes && result.geocodes.length > 0) {
+                  const location = result.geocodes[0].location;
+                  console.log('MapComponent: Destination location object:', location);
+                  
+                  if (location && typeof location.lng === 'number' && typeof location.lat === 'number') {
+                    destinationLocation = { lng: location.lng, lat: location.lat };
+                    console.log('MapComponent: Destination location found:', destinationLocation);
+                    
+                    // Set map center to destination immediately
+                    if (mapInstance.current) {
+                      mapInstance.current.setCenter([location.lng, location.lat]);
+                      mapInstance.current.setZoom(13);
+                      console.log('MapComponent: Map center set to destination');
+                    }
+                    resolve();
+                  } else {
+                    console.warn('MapComponent: Destination location invalid - missing lng/lat:', location);
+                    resolve();
+                  }
                 } else {
-                  console.warn('MapComponent: Destination location invalid:', location);
+                  console.warn('MapComponent: Geocoding failed for destination:', destination, 'Status:', status, 'Result:', result);
                   resolve();
                 }
-              } else {
-                console.warn('MapComponent: Geocoding failed for destination:', destination, status, result);
-                resolve();
-              }
-            });
+              });
+            } catch (error) {
+              clearTimeout(timeoutId);
+              console.error('MapComponent: Error in destination geocoding:', error);
+              resolve();
+            }
           });
           geocodePromises.push(destinationPromise);
 
@@ -228,92 +258,128 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                   console.log(`MapComponent: Location not specific, enhanced query: ${geocodeQuery}`);
                 }
                 
-                geocoder.getLocation(geocodeQuery, (status: string, result: any) => {
-                  console.log(`MapComponent: Activity ${index + 1} geocoding result:`, status, result);
-                  if (status === 'complete' && result.geocodes && result.geocodes.length > 0) {
-                    const location = result.geocodes[0].location;
-                    if (location && location.lng && location.lat) {
-                      const pos = {
-                        lng: location.lng,
-                        lat: location.lat,
-                        name: activity.name,
-                        index: index
-                      };
-                      activityPoints.push(pos);
-                      console.log(`MapComponent: Added activity ${index + 1} with geocoded coordinates:`, pos);
-
-                      // Add marker
-                      const marker = new AMap.Marker({
-                        position: [location.lng, location.lat],
-                        title: activity.name,
-                        map: mapInstance.current,
-                        icon: new AMap.Icon({
-                          size: new AMap.Size(28, 28),
-                          image: activity.type === 'attraction' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png' :
-                                 activity.type === 'restaurant' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_r.png' :
-                                 activity.type === 'transport' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_g.png' :
-                                 'https://webapi.amap.com/theme/v1.3/markers/n/mark_p.png',
-                          imageOffset: new AMap.Pixel(0, 0),
-                          imageSize: new AMap.Size(28, 28),
-                        }),
-                        label: {
-                          content: `${index + 1}. ${activity.name}`,
-                          direction: 'right',
-                        },
-                      });
-                      markers.push(marker);
-                  } else {
-                    console.warn(`MapComponent: Activity ${index + 1} location invalid:`, location);
-                  }
-                  // Always resolve, even if geocoding failed
+                // Add timeout for geocoding
+                const timeoutId = setTimeout(() => {
+                  console.warn(`MapComponent: Activity ${index + 1} geocoding timeout`);
                   resolve();
-                  } else {
-                    console.warn(`MapComponent: Geocoding failed for activity ${index + 1}:`, activity.location, status);
-                    // Try fallback: use activity name + destination
-                    if (activity.name !== activity.location) {
-                      console.log(`MapComponent: Trying fallback geocoding with name: ${activity.name}`);
-                      geocoder.getLocation(`${destination}${activity.name}`, (fallbackStatus: string, fallbackResult: any) => {
-                        console.log(`MapComponent: Fallback geocoding result for activity ${index + 1}:`, fallbackStatus, fallbackResult);
-                        if (fallbackStatus === 'complete' && fallbackResult.geocodes && fallbackResult.geocodes.length > 0) {
-                          const location = fallbackResult.geocodes[0].location;
-                          if (location && location.lng && location.lat) {
-                            const pos = {
-                              lng: location.lng,
-                              lat: location.lat,
-                              name: activity.name,
-                              index: index
-                            };
-                            activityPoints.push(pos);
-                            console.log(`MapComponent: Added activity ${index + 1} with fallback coordinates:`, pos);
+                }, 10000);
+                
+                try {
+                  geocoder.getLocation(geocodeQuery, (status: string, result: any) => {
+                    clearTimeout(timeoutId);
+                    console.log(`MapComponent: Activity ${index + 1} geocoding result:`, status, result);
+                    
+                    if (status === 'complete' && result && result.geocodes && result.geocodes.length > 0) {
+                      const location = result.geocodes[0].location;
+                      console.log(`MapComponent: Activity ${index + 1} location object:`, location);
+                      
+                      if (location && typeof location.lng === 'number' && typeof location.lat === 'number') {
+                        const pos = {
+                          lng: location.lng,
+                          lat: location.lat,
+                          name: activity.name,
+                          index: index
+                        };
+                        activityPoints.push(pos);
+                        console.log(`MapComponent: Added activity ${index + 1} with geocoded coordinates:`, pos);
 
-                            const marker = new AMap.Marker({
-                              position: [location.lng, location.lat],
-                              title: activity.name,
-                              map: mapInstance.current,
-                              icon: new AMap.Icon({
-                                size: new AMap.Size(28, 28),
-                                image: activity.type === 'attraction' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png' :
-                                       activity.type === 'restaurant' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_r.png' :
-                                       activity.type === 'transport' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_g.png' :
-                                       'https://webapi.amap.com/theme/v1.3/markers/n/mark_p.png',
-                                imageOffset: new AMap.Pixel(0, 0),
-                                imageSize: new AMap.Size(28, 28),
-                              }),
-                              label: {
-                                content: `${index + 1}. ${activity.name}`,
-                                direction: 'right',
-                              },
-                            });
-                            markers.push(marker);
-                          }
+                        // Add marker
+                        if (mapInstance.current) {
+                          const marker = new AMap.Marker({
+                            position: [location.lng, location.lat],
+                            title: activity.name,
+                            map: mapInstance.current,
+                            icon: new AMap.Icon({
+                              size: new AMap.Size(28, 28),
+                              image: activity.type === 'attraction' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png' :
+                                     activity.type === 'restaurant' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_r.png' :
+                                     activity.type === 'transport' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_g.png' :
+                                     'https://webapi.amap.com/theme/v1.3/markers/n/mark_p.png',
+                              imageOffset: new AMap.Pixel(0, 0),
+                              imageSize: new AMap.Size(28, 28),
+                            }),
+                            label: {
+                              content: `${index + 1}. ${activity.name}`,
+                              direction: 'right',
+                            },
+                          });
+                          markers.push(marker);
+                          console.log(`MapComponent: Marker added for activity ${index + 1}`);
                         }
-                        resolve();
-                      });
+                      } else {
+                        console.warn(`MapComponent: Activity ${index + 1} location invalid - missing lng/lat:`, location);
+                      }
                     } else {
+                      console.warn(`MapComponent: Geocoding failed for activity ${index + 1}:`, activity.location, 'Status:', status, 'Result:', result);
+                      // Try fallback: use activity name + destination
+                      if (activity.name !== activity.location) {
+                        console.log(`MapComponent: Trying fallback geocoding with name: ${activity.name}`);
+                        const fallbackTimeoutId = setTimeout(() => {
+                          console.warn(`MapComponent: Fallback geocoding timeout for activity ${index + 1}`);
+                          resolve();
+                        }, 10000);
+                        
+                        try {
+                          geocoder.getLocation(`${destination}${activity.name}`, (fallbackStatus: string, fallbackResult: any) => {
+                            clearTimeout(fallbackTimeoutId);
+                            console.log(`MapComponent: Fallback geocoding result for activity ${index + 1}:`, fallbackStatus, fallbackResult);
+                            
+                            if (fallbackStatus === 'complete' && fallbackResult && fallbackResult.geocodes && fallbackResult.geocodes.length > 0) {
+                              const location = fallbackResult.geocodes[0].location;
+                              if (location && typeof location.lng === 'number' && typeof location.lat === 'number') {
+                                const pos = {
+                                  lng: location.lng,
+                                  lat: location.lat,
+                                  name: activity.name,
+                                  index: index
+                                };
+                                activityPoints.push(pos);
+                                console.log(`MapComponent: Added activity ${index + 1} with fallback coordinates:`, pos);
+
+                                if (mapInstance.current) {
+                                  const marker = new AMap.Marker({
+                                    position: [location.lng, location.lat],
+                                    title: activity.name,
+                                    map: mapInstance.current,
+                                    icon: new AMap.Icon({
+                                      size: new AMap.Size(28, 28),
+                                      image: activity.type === 'attraction' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png' :
+                                             activity.type === 'restaurant' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_r.png' :
+                                             activity.type === 'transport' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_g.png' :
+                                             'https://webapi.amap.com/theme/v1.3/markers/n/mark_p.png',
+                                      imageOffset: new AMap.Pixel(0, 0),
+                                      imageSize: new AMap.Size(28, 28),
+                                    }),
+                                    label: {
+                                      content: `${index + 1}. ${activity.name}`,
+                                      direction: 'right',
+                                    },
+                                  });
+                                  markers.push(marker);
+                                }
+                              }
+                            }
+                            resolve();
+                          });
+                        } catch (error) {
+                          clearTimeout(fallbackTimeoutId);
+                          console.error(`MapComponent: Error in fallback geocoding for activity ${index + 1}:`, error);
+                          resolve();
+                        }
+                      } else {
+                        resolve();
+                      }
+                    }
+                    // Always resolve, even if geocoding failed
+                    if (status !== 'complete') {
                       resolve();
                     }
-                  }
-                });
+                  });
+                } catch (error) {
+                  clearTimeout(timeoutId);
+                  console.error(`MapComponent: Error in geocoding for activity ${index + 1}:`, error);
+                  resolve();
+                }
               } else {
                 console.warn(`MapComponent: Activity ${index + 1} has no location or coordinates:`, activity);
                 resolve();
