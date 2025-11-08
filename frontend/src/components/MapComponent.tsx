@@ -435,8 +435,8 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                   }
                 });
 
-                  // Wait for all geocoding to complete, then draw route
-                  Promise.all(geocodePromises).then(() => {
+                // Wait for all geocoding to complete, then draw route
+                Promise.all(geocodePromises).then(() => {
                     console.log('MapComponent: All geocoding completed', {
                       activityPointsCount: activityPoints.length,
                       markersCount: markers.length,
@@ -539,10 +539,10 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                       .join('|');
                     
                     const origin = `${routePoints[0].lng},${routePoints[0].lat}`;
-                    const destination = `${routePoints[routePoints.length - 1].lng},${routePoints[routePoints.length - 1].lat}`;
+                    const routeDestination = `${routePoints[routePoints.length - 1].lng},${routePoints[routePoints.length - 1].lat}`;
                     
                     // Build URL for driving route API
-                    let routeUrl = `https://restapi.amap.com/v3/direction/driving?key=${amapKey}&origin=${origin}&destination=${destination}&extensions=base`;
+                    let routeUrl = `https://restapi.amap.com/v3/direction/driving?key=${amapKey}&origin=${origin}&destination=${routeDestination}&extensions=base`;
                     if (waypoints) {
                       routeUrl += `&waypoints=${encodeURIComponent(waypoints)}`;
                     }
@@ -608,13 +608,12 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                         // Fallback: draw simple polyline
                         drawSimpleRoute(routePoints);
                       });
-                  });
-                } catch (error) {
-                  console.error('MapComponent: Error in geocoding initialization:', error);
-                }
-              }, 500); // Wait 500ms after map load
-            });
-          });
+                });
+            } catch (error) {
+              console.error('MapComponent: Error in geocoding initialization:', error);
+            }
+          }, 500); // Wait 500ms after map load
+        });
       } catch (error: any) {
         console.error('Map initialization error:', error);
         if (mapContainer.current) {
