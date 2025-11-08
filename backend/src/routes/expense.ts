@@ -104,12 +104,24 @@ router.get('/expenses/:travelPlanId', authenticate, async (req, res) => {
     }
 
     // Calculate totals
-    const total = (data || []).reduce((sum, expense) => sum + (expense.amount || 0), 0);
-    const byCategory = (data || []).reduce((acc: any, expense) => {
+    interface Expense {
+      id?: string;
+      user_id?: string;
+      travel_plan_id?: string;
+      category?: string;
+      amount?: number;
+      description?: string;
+      date?: string;
+      created_at?: string;
+    }
+    
+    const expenses: Expense[] = (data || []) as Expense[];
+    const total = expenses.reduce((sum: number, expense: Expense) => sum + (expense.amount || 0), 0);
+    const byCategory = expenses.reduce((acc: Record<string, number>, expense: Expense) => {
       const cat = expense.category || 'other';
       acc[cat] = (acc[cat] || 0) + (expense.amount || 0);
       return acc;
-    }, {});
+    }, {} as Record<string, number>);
 
     res.json({
       expenses: data || [],
