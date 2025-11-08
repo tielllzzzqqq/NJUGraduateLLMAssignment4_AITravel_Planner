@@ -191,6 +191,17 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                 
                 console.log('MapComponent: Starting geocoding for destination and activities');
                 
+                // Helper function to validate coordinates (China: lng 73-135, lat 18-54)
+                const validateCoordinates = (lng: number, lat: number): boolean => {
+                  if (!lng || !lat || isNaN(lng) || isNaN(lat)) return false;
+                  // China coordinates range
+                  if (lng < 73 || lng > 135 || lat < 18 || lat > 54) {
+                    console.warn(`MapComponent: Invalid coordinates (outside China): lng=${lng}, lat=${lat}`);
+                    return false;
+                  }
+                  return true;
+                };
+
                 // Helper function to geocode using HTTP API (more reliable than SDK plugins)
                 const geocodeWithHTTP = (address: string, searchName?: string): Promise<{ lng: number; lat: number } | null> => {
                   return new Promise((resolve) => {
@@ -201,20 +212,36 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                       return;
                     }
 
-                    // Try multiple queries: name+city, address, name only
-                    const queries = searchName 
-                      ? [`${destination}${searchName}`, `${destination}${address}`, searchName, address]
-                      : [`${destination}${address}`, address];
+                    // Build queries - avoid duplicate city name
+                    const queries: string[] = [];
+                    if (searchName) {
+                      // If address already contains city, don't add it again
+                      if (!address.includes(destination)) {
+                        queries.push(`${destination}${searchName}`);
+                        queries.push(`${destination}${address}`);
+                      } else {
+                        queries.push(searchName);
+                        queries.push(address);
+                      }
+                      queries.push(searchName);
+                    }
+                    if (!address.includes(destination)) {
+                      queries.push(`${destination}${address}`);
+                    }
+                    queries.push(address);
+                    
+                    // Remove duplicates
+                    const uniqueQueries = Array.from(new Set(queries));
                     
                     const tryNext = (index: number) => {
-                      if (index >= queries.length) {
+                      if (index >= uniqueQueries.length) {
                         console.warn(`MapComponent: HTTP geocoding failed for all queries of "${address}"`);
                         resolve(null);
                         return;
                       }
                       
-                      const query = queries[index];
-                      console.log(`MapComponent: Trying HTTP geocoding for "${query}" (${index + 1}/${queries.length})`);
+                      const query = uniqueQueries[index];
+                      console.log(`MapComponent: Trying HTTP geocoding for "${query}" (${index + 1}/${uniqueQueries.length})`);
                       
                       // Use Geocoding API (地理编码API)
                       const geocodeUrl = `https://restapi.amap.com/v3/geocode/geo?key=${amapKey}&address=${encodeURIComponent(query)}&city=${encodeURIComponent(destination || '')}`;
@@ -226,11 +253,15 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                           
                           if (data.status === '1' && data.geocodes && data.geocodes.length > 0) {
                             const locationStr = data.geocodes[0].location;
-                            const [lng, lat] = locationStr.split(',').map(Number);
-                            if (lng && lat) {
-                              console.log(`MapComponent: HTTP geocoding found location for "${query}":`, { lng, lat });
-                              resolve({ lng, lat });
-                              return;
+                            const parts = locationStr.split(',');
+                            if (parts.length === 2) {
+                              const lng = Number(parts[0]);
+                              const lat = Number(parts[1]);
+                              if (validateCoordinates(lng, lat)) {
+                                console.log(`MapComponent: HTTP geocoding found location for "${query}":`, { lng, lat });
+                                resolve({ lng, lat });
+                                return;
+                              }
                             }
                           }
                           
@@ -246,11 +277,15 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                               if (poiData.status === '1' && poiData.pois && poiData.pois.length > 0) {
                                 const poi = poiData.pois[0];
                                 const locationStr = poi.location;
-                                const [lng, lat] = locationStr.split(',').map(Number);
-                                if (lng && lat) {
-                                  console.log(`MapComponent: POI search found location for "${query}":`, { lng, lat });
-                                  resolve({ lng, lat });
-                                  return;
+                                const parts = locationStr.split(',');
+                                if (parts.length === 2) {
+                                  const lng = Number(parts[0]);
+                                  const lat = Number(parts[1]);
+                                  if (validateCoordinates(lng, lat)) {
+                                    console.log(`MapComponent: POI search found location for "${query}":`, { lng, lat });
+                                    resolve({ lng, lat });
+                                    return;
+                                  }
                                 }
                               }
                               
@@ -483,54 +518,81 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                     }
 
                     // Draw route between points using Driving service
-                    const driving = new AMap.Driving({
-                      map: mapInstance.current,
-                      panel: null, // Don't show route panel
-                      hideMarkers: true, // We already have custom markers
-                    });
+                    try {
+                      const driving = new AMap.Driving({
+                        map: mapInstance.current,
+                        panel: null, // Don't show route panel
+                        hideMarkers: true, // We already have custom markers
+                      });
 
-                    // Build route points in order
-                    const routePoints = activityPoints.map(p => ({ lng: p.lng, lat: p.lat }));
-
-                    // If we have more than 2 points, use waypoints
-                    if (routePoints.length === 2) {
-                      // Simple two-point route
-                      driving.search(
-                        new AMap.LngLat(routePoints[0].lng, routePoints[0].lat),
-                        new AMap.LngLat(routePoints[1].lng, routePoints[1].lat),
-                        {},
-                        (status: string, result: any) => {
-                          if (status === 'complete') {
-                            console.log('Route planning complete');
-                            // Route is automatically drawn on the map by AMap.Driving
-                          } else {
-                            console.warn('Route planning failed:', status);
-                            // Fallback: draw simple polyline
-                            drawSimpleRoute(routePoints);
-                          }
-                        }
-                      );
-                    } else {
-                      // Multiple points: use waypoints
-                      const waypoints = routePoints.slice(1, -1).map(p => new AMap.LngLat(p.lng, p.lat));
+                      // Build route points in order and validate
+                      const routePoints = activityPoints
+                        .map(p => ({ lng: p.lng, lat: p.lat }))
+                        .filter(p => validateCoordinates(p.lng, p.lat));
                       
-                      driving.search(
-                        new AMap.LngLat(routePoints[0].lng, routePoints[0].lat),
-                        new AMap.LngLat(routePoints[routePoints.length - 1].lng, routePoints[routePoints.length - 1].lat),
-                        {
-                          waypoints: waypoints,
-                        },
-                        (status: string, result: any) => {
-                          if (status === 'complete') {
-                            console.log('Route planning complete with waypoints');
-                            // Route is automatically drawn on the map by AMap.Driving
-                          } else {
-                            console.warn('Route planning failed:', status);
-                            // Fallback: draw simple polyline
-                            drawSimpleRoute(routePoints);
+                      if (routePoints.length < 2) {
+                        console.warn('MapComponent: Not enough valid route points after validation');
+                        return;
+                      }
+
+                      console.log(`MapComponent: Planning route with ${routePoints.length} points:`, routePoints);
+
+                      // If we have more than 2 points, use waypoints
+                      if (routePoints.length === 2) {
+                        // Simple two-point route
+                        const start = new AMap.LngLat(routePoints[0].lng, routePoints[0].lat);
+                        const end = new AMap.LngLat(routePoints[1].lng, routePoints[1].lat);
+                        
+                        console.log(`MapComponent: Planning route from (${routePoints[0].lng}, ${routePoints[0].lat}) to (${routePoints[1].lng}, ${routePoints[1].lat})`);
+                        
+                        driving.search(
+                          start,
+                          end,
+                          {},
+                          (status: string, result: any) => {
+                            console.log(`MapComponent: Route planning callback - status: ${status}`, result);
+                            if (status === 'complete') {
+                              console.log('MapComponent: Route planning complete');
+                              // Route is automatically drawn on the map by AMap.Driving
+                            } else {
+                              console.warn(`MapComponent: Route planning failed - status: ${status}, result:`, result);
+                              // Fallback: draw simple polyline
+                              drawSimpleRoute(routePoints);
+                            }
                           }
-                        }
-                      );
+                        );
+                      } else {
+                        // Multiple points: use waypoints
+                        const waypoints = routePoints.slice(1, -1).map(p => new AMap.LngLat(p.lng, p.lat));
+                        const start = new AMap.LngLat(routePoints[0].lng, routePoints[0].lat);
+                        const end = new AMap.LngLat(routePoints[routePoints.length - 1].lng, routePoints[routePoints.length - 1].lat);
+                        
+                        console.log(`MapComponent: Planning route with ${waypoints.length} waypoints`);
+                        
+                        driving.search(
+                          start,
+                          end,
+                          {
+                            waypoints: waypoints,
+                          },
+                          (status: string, result: any) => {
+                            console.log(`MapComponent: Route planning callback - status: ${status}`, result);
+                            if (status === 'complete') {
+                              console.log('MapComponent: Route planning complete with waypoints');
+                              // Route is automatically drawn on the map by AMap.Driving
+                            } else {
+                              console.warn(`MapComponent: Route planning failed - status: ${status}, result:`, result);
+                              // Fallback: draw simple polyline
+                              drawSimpleRoute(routePoints);
+                            }
+                          }
+                        );
+                      }
+                    } catch (error) {
+                      console.error('MapComponent: Error creating Driving service:', error);
+                      // Fallback: draw simple polyline
+                      const routePoints = activityPoints.map(p => ({ lng: p.lng, lat: p.lat }));
+                      drawSimpleRoute(routePoints);
                     }
                   });
                 } catch (error) {
