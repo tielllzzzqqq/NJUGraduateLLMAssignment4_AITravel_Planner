@@ -33,6 +33,23 @@ export default function Dashboard() {
     }
   };
 
+  const handleDeletePlan = async (planId: string, destination: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // 防止触发卡片的点击事件
+    
+    if (!window.confirm(`确定要删除 "${destination}" 的旅行计划吗？此操作无法撤销。`)) {
+      return;
+    }
+
+    try {
+      await apiClient.delete(`/travel/plans/${planId}`);
+      // 删除成功后刷新列表
+      setPlans(plans.filter(plan => plan.id !== planId));
+    } catch (error: any) {
+      console.error('Failed to delete plan:', error);
+      alert(error.response?.data?.error || '删除失败，请重试');
+    }
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     localStorage.removeItem('supabase.auth.token');
@@ -69,10 +86,33 @@ export default function Dashboard() {
             <div 
               key={plan.id} 
               className="card" 
-              style={{ cursor: 'pointer' }}
+              style={{ cursor: 'pointer', position: 'relative' }}
               onClick={() => navigate(`/plan/${plan.id}`)}
             >
-              <h2 style={{ marginBottom: '15px', color: '#333' }}>{plan.destination}</h2>
+              <button
+                onClick={(e) => handleDeletePlan(plan.id, plan.destination, e)}
+                style={{
+                  position: 'absolute',
+                  top: '10px',
+                  right: '10px',
+                  background: '#ff4757',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '5px',
+                  padding: '5px 10px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 'bold',
+                  zIndex: 10,
+                  transition: 'background 0.2s'
+                }}
+                onMouseOver={(e) => e.currentTarget.style.background = '#ff3838'}
+                onMouseOut={(e) => e.currentTarget.style.background = '#ff4757'}
+                title="删除计划"
+              >
+                删除
+              </button>
+              <h2 style={{ marginBottom: '15px', color: '#333', paddingRight: '60px' }}>{plan.destination}</h2>
               <p style={{ color: '#666', marginBottom: '10px' }}>
                 <strong>天数：</strong>{plan.days} 天
               </p>
