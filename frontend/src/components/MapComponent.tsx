@@ -106,28 +106,6 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
 
         console.log('MapComponent: Map initialized');
         
-        // Wait for map to be ready before geocoding
-        mapInstance.current.on('complete', () => {
-          console.log('MapComponent: Map ready event fired');
-          initializeGeocoding();
-        });
-        
-        // Also try immediate initialization if map is already ready
-        if (mapInstance.current.getZoom) {
-          console.log('MapComponent: Map seems ready, initializing geocoding');
-          // Use setTimeout to ensure map is fully initialized
-          setTimeout(() => {
-            initializeGeocoding();
-          }, 500);
-        } else {
-          // Fallback: initialize after a delay
-          setTimeout(() => {
-            initializeGeocoding();
-          }, 1000);
-        }
-        
-        function initializeGeocoding() {
-
         // Store markers and route points (ordered by activity sequence)
         const markers: any[] = [];
         const activityPoints: Array<{ lng: number; lat: number; name: string; index: number }> = [];
@@ -154,8 +132,8 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
           mapInstance.current.add(polyline);
         };
 
-          // Load plugins and initialize map
-          AMap.plugin(['AMap.Geocoder', 'AMap.Driving'], () => {
+        // Load plugins and initialize map
+        AMap.plugin(['AMap.Geocoder', 'AMap.Driving'], () => {
             console.log('MapComponent: Plugins loaded, creating Geocoder');
             
             try {
@@ -522,8 +500,7 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
               );
             }
           });
-          });
-        }
+        });
       } catch (error: any) {
         console.error('Map initialization error:', error);
         if (mapContainer.current) {
