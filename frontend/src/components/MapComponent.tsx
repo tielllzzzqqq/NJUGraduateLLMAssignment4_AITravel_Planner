@@ -132,6 +132,36 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
           mapInstance.current.add(polyline);
         };
 
+        // Set city center immediately (don't wait for geocoding)
+        const cityCoordinates: { [key: string]: [number, number] } = {
+          '北京': [116.397428, 39.90923],
+          '上海': [121.473701, 31.230416],
+          '广州': [113.264385, 23.129112],
+          '深圳': [114.057868, 22.543099],
+          '杭州': [120.153576, 30.287459],
+          '成都': [104.066541, 30.572269],
+          '苏州': [120.585315, 31.298886],
+          '南京': [118.796877, 32.060255],
+          '武汉': [114.316200, 30.581000],
+          '西安': [108.939840, 34.341270],
+        };
+        
+        // Find city and set center immediately
+        let foundCity = false;
+        for (const [city, coords] of Object.entries(cityCoordinates)) {
+          if (destination.includes(city)) {
+            console.log(`MapComponent: Setting map center immediately to ${city}`);
+            mapInstance.current.setCenter(coords);
+            mapInstance.current.setZoom(13);
+            foundCity = true;
+            break;
+          }
+        }
+        
+        if (!foundCity) {
+          console.log('MapComponent: City not found in preset list, keeping default center');
+        }
+
         // Wait for map to be fully loaded, then load plugins
         mapInstance.current.on('complete', () => {
           console.log('MapComponent: Map fully loaded, loading plugins');
@@ -148,7 +178,7 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                   city: destination || '全国',
                   citylimit: true,
                   type: '',
-                  pageSize: 1,
+                  pageSize: 5, // Increase to get more results
                   pageIndex: 1,
                 });
                 
@@ -162,7 +192,7 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                 if (!geocoder || typeof geocoder.getLocation !== 'function') {
                   console.error('MapComponent: Geocoder is not properly initialized');
                   console.error('MapComponent: Please check if your API Key has Geocoding service enabled');
-                  return;
+                  // Continue anyway, we'll use PlaceSearch
                 }
                 
                 if (!mapInstance.current) {
@@ -172,154 +202,132 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                 
                 console.log('MapComponent: Starting geocoding for destination and activities');
                 
-                // Helper function to geocode using PlaceSearch (fallback)
-                const geocodeWithPlaceSearch = (address: string): Promise<{ lng: number; lat: number } | null> => {
+                // Helper function to geocode using PlaceSearch (primary method, more reliable)
+                const geocodeWithPlaceSearch = (address: string, searchName?: string): Promise<{ lng: number; lat: number } | null> => {
                   return new Promise((resolve) => {
-                    console.log(`MapComponent: Trying PlaceSearch for "${address}"`);
+                    // Try with full address first, then with name if provided
+                    const queries = searchName ? [`${destination}${searchName}`, `${destination}${address}`, address] : [address];
                     
-                    // Add timeout for PlaceSearch
-                    const timeoutId = setTimeout(() => {
-                      console.warn(`MapComponent: PlaceSearch timeout for "${address}"`);
-                      resolve(null);
-                    }, 5000);
-                    
-                    try {
-                      placeSearch.search(address, (status: string, result: any) => {
-                        clearTimeout(timeoutId);
-                        console.log(`MapComponent: PlaceSearch callback for "${address}" - status:`, status, 'result:', result);
-                        
-                        if (status === 'complete' && result && result.poiList && result.poiList.pois && result.poiList.pois.length > 0) {
-                          const poi = result.poiList.pois[0];
-                          if (poi.location) {
-                            const location = { lng: poi.location.lng, lat: poi.location.lat };
-                            console.log(`MapComponent: PlaceSearch found location for "${address}":`, location);
-                            resolve(location);
+                    const tryNext = (index: number) => {
+                      if (index >= queries.length) {
+                        console.warn(`MapComponent: PlaceSearch failed for all queries of "${address}"`);
+                        resolve(null);
+                        return;
+                      }
+                      
+                      const query = queries[index];
+                      console.log(`MapComponent: Trying PlaceSearch for "${query}" (${index + 1}/${queries.length})`);
+                      
+                      // Shorter timeout - 2 seconds
+                      const timeoutId = setTimeout(() => {
+                        console.warn(`MapComponent: PlaceSearch timeout for "${query}", trying next...`);
+                        tryNext(index + 1);
+                      }, 2000);
+                      
+                      try {
+                        placeSearch.search(query, (status: string, result: any) => {
+                          clearTimeout(timeoutId);
+                          console.log(`MapComponent: PlaceSearch callback for "${query}" - status:`, status);
+                          
+                          if (status === 'complete' && result && result.poiList && result.poiList.pois && result.poiList.pois.length > 0) {
+                            const poi = result.poiList.pois[0];
+                            if (poi.location) {
+                              const location = { lng: poi.location.lng, lat: poi.location.lat };
+                              console.log(`MapComponent: PlaceSearch found location for "${query}":`, location);
+                              resolve(location);
+                            } else {
+                              console.warn(`MapComponent: PlaceSearch POI has no location, trying next...`);
+                              tryNext(index + 1);
+                            }
                           } else {
-                            console.warn(`MapComponent: PlaceSearch POI has no location:`, poi);
-                            resolve(null);
+                            console.warn(`MapComponent: PlaceSearch failed for "${query}" - status:`, status);
+                            tryNext(index + 1);
                           }
-                        } else {
-                          console.warn(`MapComponent: PlaceSearch failed for "${address}" - status:`, status, 'result:', result);
-                          if (status === 'error' || status === 'no_data') {
-                            console.warn(`MapComponent: PlaceSearch error may indicate API Key doesn't have PlaceSearch service enabled`);
-                          }
-                          resolve(null);
-                        }
-                      });
-                    } catch (error) {
-                      clearTimeout(timeoutId);
-                      console.error(`MapComponent: Error in PlaceSearch for "${address}":`, error);
-                      resolve(null);
-                    }
+                        });
+                      } catch (error) {
+                        clearTimeout(timeoutId);
+                        console.error(`MapComponent: Error in PlaceSearch for "${query}":`, error);
+                        tryNext(index + 1);
+                      }
+                    };
+                    
+                    tryNext(0);
                   });
                 };
 
                 // Geocode all locations and then draw route
                 const geocodePromises: Promise<void>[] = [];
                 
-                // Helper function to geocode with retry and fallback
-                const geocodeLocation = (address: string, retries = 1): Promise<{ lng: number; lat: number } | null> => {
+                // Helper function to geocode - try PlaceSearch first (faster and more reliable)
+                const geocodeLocation = (address: string, activityName?: string): Promise<{ lng: number; lat: number } | null> => {
                   return new Promise((resolve) => {
-                    console.log(`MapComponent: Geocoding "${address}" (attempt ${3 - retries}/3)`);
+                    console.log(`MapComponent: Geocoding "${address}"${activityName ? ` (name: ${activityName})` : ''}`);
                     
-                    let callbackExecuted = false;
-                    const timeoutId = setTimeout(() => {
-                      if (!callbackExecuted) {
-                        callbackExecuted = true;
-                        console.warn(`MapComponent: Geocoding timeout for "${address}" - callback never executed`);
-                        console.warn('MapComponent: This usually means the API Key does not have Geocoding service enabled');
-                        console.warn('MapComponent: Trying PlaceSearch as fallback...');
-                        
-                        // Try PlaceSearch as fallback
-                        geocodeWithPlaceSearch(address).then((location) => {
-                          if (location) {
-                            resolve(location);
-                          } else if (retries > 0) {
-                            console.log(`MapComponent: Retrying geocoding for "${address}"`);
-                            geocodeLocation(address, retries - 1).then(resolve);
-                          } else {
-                            resolve(null);
-                          }
-                        });
+                    // Try PlaceSearch first (usually faster and more reliable)
+                    geocodeWithPlaceSearch(address, activityName).then((location) => {
+                      if (location) {
+                        resolve(location);
+                        return;
                       }
-                    }, 5000); // Reduced timeout to 5 seconds
-                    
-                    try {
-                      geocoder.getLocation(address, (status: string, result: any) => {
-                        if (callbackExecuted) {
-                          console.warn(`MapComponent: Callback executed after timeout for "${address}"`);
-                          return;
+                      
+                      // If PlaceSearch fails, try Geocoder (if available)
+                      if (!geocoder || typeof geocoder.getLocation !== 'function') {
+                        console.warn(`MapComponent: Geocoder not available, skipping for "${address}"`);
+                        resolve(null);
+                        return;
+                      }
+                      
+                      console.log(`MapComponent: PlaceSearch failed, trying Geocoder for "${address}"`);
+                      let callbackExecuted = false;
+                      const timeoutId = setTimeout(() => {
+                        if (!callbackExecuted) {
+                          callbackExecuted = true;
+                          console.warn(`MapComponent: Geocoder timeout for "${address}"`);
+                          resolve(null);
                         }
-                        callbackExecuted = true;
-                        clearTimeout(timeoutId);
-                        console.log(`MapComponent: Geocoding callback for "${address}" - status:`, status);
-                        
-                        if (status === 'complete' && result && result.geocodes && result.geocodes.length > 0) {
-                          const location = result.geocodes[0].location;
-                          if (location && typeof location.lng === 'number' && typeof location.lat === 'number') {
-                            console.log(`MapComponent: Successfully geocoded "${address}":`, location);
-                            resolve({ lng: location.lng, lat: location.lat });
-                          } else {
-                            console.warn(`MapComponent: Invalid location data for "${address}":`, location);
-                            // Try PlaceSearch fallback
-                            geocodeWithPlaceSearch(address).then((fallbackLocation) => {
-                              if (fallbackLocation) {
-                                resolve(fallbackLocation);
-                              } else if (retries > 0) {
-                                geocodeLocation(address, retries - 1).then(resolve);
-                              } else {
-                                resolve(null);
-                              }
-                            });
-                          }
-                        } else {
-                          console.warn(`MapComponent: Geocoding failed for "${address}" - status:`, status);
-                          if (status === 'error' || status === 'no_data') {
-                            console.warn(`MapComponent: Error status indicates API Key may not have Geocoding service enabled`);
-                          }
-                          // Try PlaceSearch fallback
-                          geocodeWithPlaceSearch(address).then((fallbackLocation) => {
-                            if (fallbackLocation) {
-                              resolve(fallbackLocation);
-                            } else if (retries > 0) {
-                              geocodeLocation(address, retries - 1).then(resolve);
+                      }, 2000); // Short timeout - 2 seconds
+                    
+                      try {
+                        geocoder.getLocation(address, (status: string, result: any) => {
+                          if (callbackExecuted) return;
+                          callbackExecuted = true;
+                          clearTimeout(timeoutId);
+                          
+                          if (status === 'complete' && result && result.geocodes && result.geocodes.length > 0) {
+                            const location = result.geocodes[0].location;
+                            if (location && typeof location.lng === 'number' && typeof location.lat === 'number') {
+                              console.log(`MapComponent: Geocoder found location for "${address}":`, location);
+                              resolve({ lng: location.lng, lat: location.lat });
                             } else {
                               resolve(null);
                             }
-                          });
-                        }
-                      });
-                    } catch (error) {
-                      if (!callbackExecuted) {
-                        callbackExecuted = true;
-                        clearTimeout(timeoutId);
-                        console.error(`MapComponent: Error geocoding "${address}":`, error);
-                        // Try PlaceSearch fallback
-                        geocodeWithPlaceSearch(address).then((fallbackLocation) => {
-                          if (fallbackLocation) {
-                            resolve(fallbackLocation);
-                          } else if (retries > 0) {
-                            geocodeLocation(address, retries - 1).then(resolve);
                           } else {
                             resolve(null);
                           }
                         });
+                      } catch (error) {
+                        if (!callbackExecuted) {
+                          callbackExecuted = true;
+                          clearTimeout(timeoutId);
+                          console.error(`MapComponent: Error in Geocoder for "${address}":`, error);
+                          resolve(null);
+                        }
                       }
-                    }
+                    });
                   });
                 };
 
-                // First, geocode destination to set map center
+                // First, geocode destination (map center already set, just update if we get better coordinates)
                 const destinationPromise = geocodeLocation(destination).then((location) => {
                   if (location) {
                     destinationLocation = location;
                     console.log('MapComponent: Destination location found:', destinationLocation);
                     
-                    // Set map center to destination immediately
+                    // Update map center if we got coordinates
                     if (mapInstance.current) {
                       mapInstance.current.setCenter([location.lng, location.lat]);
                       mapInstance.current.setZoom(13);
-                      console.log('MapComponent: Map center set to destination');
+                      console.log('MapComponent: Map center updated to destination');
                     }
                   } else {
                     console.warn('MapComponent: Failed to geocode destination:', destination);
@@ -384,7 +392,8 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                       console.log(`MapComponent: Location not specific, enhanced query: ${geocodeQuery}`);
                     }
                     
-                    const activityPromise = geocodeLocation(geocodeQuery).then((location) => {
+                    // Use activity name for better search results
+                    const activityPromise = geocodeLocation(geocodeQuery, activity.name).then((location) => {
                       if (location) {
                         const pos = {
                           lng: location.lng,
@@ -393,7 +402,7 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                           index: index
                         };
                         activityPoints.push(pos);
-                        console.log(`MapComponent: Added activity ${index + 1} with geocoded coordinates:`, pos);
+                        console.log(`MapComponent: Added activity ${index + 1} "${activity.name}" with coordinates:`, pos);
 
                         // Add marker
                         if (mapInstance.current) {
@@ -402,28 +411,26 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                             title: activity.name,
                             map: mapInstance.current,
                             icon: new AMap.Icon({
-                              size: new AMap.Size(28, 28),
+                              size: new AMap.Size(32, 32),
                               image: activity.type === 'attraction' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png' :
                                      activity.type === 'restaurant' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_r.png' :
                                      activity.type === 'transport' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_g.png' :
                                      'https://webapi.amap.com/theme/v1.3/markers/n/mark_p.png',
                               imageOffset: new AMap.Pixel(0, 0),
-                              imageSize: new AMap.Size(28, 28),
+                              imageSize: new AMap.Size(32, 32),
                             }),
                             label: {
                               content: `${index + 1}. ${activity.name}`,
                               direction: 'right',
+                              offset: new AMap.Pixel(10, 0),
                             },
+                            zIndex: 100,
                           });
                           markers.push(marker);
-                          console.log(`MapComponent: Marker added for activity ${index + 1}`);
+                          console.log(`MapComponent: Marker added for activity ${index + 1} "${activity.name}"`);
                         }
                       } else {
-                        console.warn(`MapComponent: Failed to geocode activity ${index + 1}:`, activity.name, activity.location);
-                        // Try fallback with activity name
-                        if (activity.name !== geocodeQuery) {
-                          return geocodeLocation(`${destination}${activity.name}`);
-                        }
+                        console.warn(`MapComponent: Failed to geocode activity ${index + 1} "${activity.name}" at "${activity.location}"`);
                       }
                     });
                     geocodePromises.push(activityPromise);
