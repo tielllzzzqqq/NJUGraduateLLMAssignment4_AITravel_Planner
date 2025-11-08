@@ -241,9 +241,11 @@ export class LLMService {
       if (jsonMatch) {
         let jsonString = jsonMatch[0];
         
-        // Try to fix common JSON issues
-        // Remove trailing commas before closing brackets/braces
-        jsonString = jsonString.replace(/,(\s*[}\]])/g, '$1');
+      // Try to fix common JSON issues
+      // Fix type field: "dining" -> "restaurant"
+      jsonString = jsonString.replace(/"type":\s*"dining"/g, '"type": "restaurant"');
+      // Remove trailing commas before closing brackets/braces
+      jsonString = jsonString.replace(/,(\s*[}\]])/g, '$1');
         
         // Try to fix incomplete JSON by finding the last complete structure
         let braceCount = 0;
@@ -305,7 +307,20 @@ export class LLMService {
       itinerary: plan.itinerary.map((day: any, index: number) => ({
         day: day.day || index + 1,
         date: day.date || new Date(Date.now() + index * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        activities: Array.isArray(day.activities) ? day.activities : []
+        activities: Array.isArray(day.activities) 
+          ? day.activities.map((activity: any) => ({
+              ...activity,
+              // Normalize activity type
+              type: activity.type === 'dining' ? 'restaurant' : 
+                    (['transport', 'attraction', 'restaurant', 'accommodation'].includes(activity.type) 
+                      ? activity.type 
+                      : 'attraction'),
+              // Ensure location is detailed enough for geocoding
+              location: activity.location && activity.location.trim() !== '' 
+                ? activity.location 
+                : `${request.destination}${activity.name}`
+            }))
+          : []
       })),
       summary: plan.summary || {
         totalEstimatedCost: request.budget,
@@ -323,6 +338,18 @@ export class LLMService {
       const date = new Date(startDate);
       date.setDate(date.getDate() + i);
       
+      // Generate more specific locations for fallback plan
+      const attractions = [
+        `${request.destination}市中心`,
+        `${request.destination}著名景点`,
+        `${request.destination}历史文化区`
+      ];
+      const restaurants = [
+        `${request.destination}特色餐厅`,
+        `${request.destination}美食街`,
+        `${request.destination}当地小吃`
+      ];
+      
       itinerary.push({
         day: i + 1,
         date: date.toISOString().split('T')[0],
@@ -331,7 +358,7 @@ export class LLMService {
             time: '09:00',
             type: 'attraction' as const,
             name: `${request.destination} 主要景点`,
-            location: request.destination,
+            location: attractions[i % attractions.length],
             description: '探索当地主要景点',
             cost: Math.floor(request.budget / request.days / 3)
           },
@@ -339,7 +366,7 @@ export class LLMService {
             time: '12:00',
             type: 'restaurant' as const,
             name: '当地特色餐厅',
-            location: request.destination,
+            location: restaurants[i % restaurants.length],
             description: '品尝当地美食',
             cost: Math.floor(request.budget / request.days / 5)
           },
@@ -347,7 +374,7 @@ export class LLMService {
             time: '14:00',
             type: 'attraction' as const,
             name: '文化体验',
-            location: request.destination,
+            location: `${request.destination}文化区`,
             description: '体验当地文化',
             cost: Math.floor(request.budget / request.days / 4)
           }

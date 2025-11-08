@@ -215,10 +215,17 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                 // Try to geocode with the full location string first
                 let geocodeQuery = activity.location;
                 
-                // If location is very specific (contains address), use it directly
-                // Otherwise, try combining with destination
-                if (!geocodeQuery.includes('市') && !geocodeQuery.includes('区') && !geocodeQuery.includes('县')) {
+                // If location is just a city name (same as destination), use activity name instead
+                if (geocodeQuery === destination || geocodeQuery.trim() === destination.trim()) {
+                  geocodeQuery = `${destination}${activity.name}`;
+                  console.log(`MapComponent: Location is same as destination, using activity name: ${geocodeQuery}`);
+                } else if (!geocodeQuery.includes('市') && !geocodeQuery.includes('区') && !geocodeQuery.includes('县') && !geocodeQuery.includes('路') && !geocodeQuery.includes('街')) {
+                  // If location is not specific enough, combine with destination and activity name
                   geocodeQuery = `${destination}${activity.location}`;
+                  if (!geocodeQuery.includes(activity.name)) {
+                    geocodeQuery = `${destination}${activity.name}`;
+                  }
+                  console.log(`MapComponent: Location not specific, enhanced query: ${geocodeQuery}`);
                 }
                 
                 geocoder.getLocation(geocodeQuery, (status: string, result: any) => {
@@ -255,15 +262,18 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                         },
                       });
                       markers.push(marker);
-                    } else {
-                      console.warn(`MapComponent: Activity ${index + 1} location invalid:`, location);
-                    }
+                  } else {
+                    console.warn(`MapComponent: Activity ${index + 1} location invalid:`, location);
+                  }
+                  // Always resolve, even if geocoding failed
+                  resolve();
                   } else {
                     console.warn(`MapComponent: Geocoding failed for activity ${index + 1}:`, activity.location, status);
                     // Try fallback: use activity name + destination
                     if (activity.name !== activity.location) {
                       console.log(`MapComponent: Trying fallback geocoding with name: ${activity.name}`);
                       geocoder.getLocation(`${destination}${activity.name}`, (fallbackStatus: string, fallbackResult: any) => {
+                        console.log(`MapComponent: Fallback geocoding result for activity ${index + 1}:`, fallbackStatus, fallbackResult);
                         if (fallbackStatus === 'complete' && fallbackResult.geocodes && fallbackResult.geocodes.length > 0) {
                           const location = fallbackResult.geocodes[0].location;
                           if (location && location.lng && location.lat) {
