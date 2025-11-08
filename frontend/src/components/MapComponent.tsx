@@ -336,7 +336,13 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
 
     return () => {
       if (mapInstance.current) {
-        mapInstance.current.destroy();
+        try {
+          mapInstance.current.clearMap();
+          mapInstance.current.destroy();
+        } catch (e) {
+          console.warn('Error cleaning up map:', e);
+        }
+        mapInstance.current = null;
       }
     };
   }, [activities, destination]);
