@@ -109,13 +109,47 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
           throw new Error('AMap not available');
         }
 
-        // Initialize map with default center (will be updated after geocoding)
+        // Determine initial map center based on destination
+        const cityCoordinates: { [key: string]: [number, number] } = {
+          '北京': [116.397428, 39.90923],
+          '上海': [121.473701, 31.230416],
+          '广州': [113.264385, 23.129112],
+          '深圳': [114.057868, 22.543099],
+          '杭州': [120.153576, 30.287459],
+          '成都': [104.066541, 30.572269],
+          '苏州': [120.585315, 31.298886],
+          '南京': [118.796877, 32.060255],
+          '武汉': [114.316200, 30.581000],
+          '西安': [108.939840, 34.341270],
+        };
+        
+        // Find city and use its coordinates as initial center
+        let initialCenter: [number, number] = [116.397428, 39.90923]; // Default to Beijing
+        let foundCity = false;
+        for (const [city, coords] of Object.entries(cityCoordinates)) {
+          if (destination.includes(city)) {
+            initialCenter = coords;
+            console.log(`MapComponent: Using ${city} coordinates as initial center: [${coords[0]}, ${coords[1]}]`);
+            foundCity = true;
+            break;
+          }
+        }
+        
+        if (!foundCity) {
+          console.log('MapComponent: City not found in preset list, using default center (Beijing)');
+        }
+
+        // Initialize map with city center (not default Beijing)
         mapInstance.current = new AMap.Map(mapContainer.current, {
           zoom: 13,
-          center: [116.397428, 39.90923], // Default to Beijing, will be updated
+          center: initialCenter, // Use city coordinates directly
         });
 
-        console.log('MapComponent: Map initialized');
+        console.log('MapComponent: Map initialized with center:', initialCenter);
+        
+        // Verify initial center was set correctly
+        const initialCenterCheck = mapInstance.current.getCenter();
+        console.log(`MapComponent: Map center after initialization:`, initialCenterCheck);
         
         // Store markers and route points (ordered by activity sequence)
         const markers: any[] = [];
@@ -142,43 +176,6 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
           });
           mapInstance.current.add(polyline);
         };
-
-        // Set city center immediately (don't wait for geocoding)
-        const cityCoordinates: { [key: string]: [number, number] } = {
-          '北京': [116.397428, 39.90923],
-          '上海': [121.473701, 31.230416],
-          '广州': [113.264385, 23.129112],
-          '深圳': [114.057868, 22.543099],
-          '杭州': [120.153576, 30.287459],
-          '成都': [104.066541, 30.572269],
-          '苏州': [120.585315, 31.298886],
-          '南京': [118.796877, 32.060255],
-          '武汉': [114.316200, 30.581000],
-          '西安': [108.939840, 34.341270],
-        };
-        
-        // Find city and set center immediately
-        let foundCity = false;
-        for (const [city, coords] of Object.entries(cityCoordinates)) {
-          if (destination.includes(city)) {
-            console.log(`MapComponent: Setting map center immediately to ${city} at [${coords[0]}, ${coords[1]}]`);
-            // AMap uses [lng, lat] format - coords is already in this format
-            mapInstance.current.setCenter(coords);
-            mapInstance.current.setZoom(13);
-            
-            // Verify center was set
-            const currentCenter = mapInstance.current.getCenter();
-            console.log(`MapComponent: Map center after immediate set:`, currentCenter);
-            foundCity = true;
-            break;
-          }
-        }
-        
-        if (!foundCity) {
-          console.log('MapComponent: City not found in preset list, keeping default center');
-          const currentCenter = mapInstance.current.getCenter();
-          console.log(`MapComponent: Current map center:`, currentCenter);
-        }
 
         // Wait for map to be fully loaded, then start geocoding
         mapInstance.current.on('complete', () => {
