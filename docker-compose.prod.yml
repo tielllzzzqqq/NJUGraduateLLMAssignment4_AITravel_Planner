@@ -4,6 +4,7 @@ services:
   travel-planner:
     image: crpi-ds0j5gxjdmixc0v8.cn-hangzhou.personal.cr.aliyuncs.com/aliyun_lzq/travel_planner:latest
     container_name: travel-planner
+    platform: linux/amd64  # 如果镜像是在 amd64 上构建的，在 ARM Mac 上需要指定平台
     ports:
       - "3000:3000"
     environment:

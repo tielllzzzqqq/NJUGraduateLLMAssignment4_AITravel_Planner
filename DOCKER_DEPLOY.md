@@ -22,11 +22,17 @@ docker login crpi-ds0j5gxjdmixc0v8.cn-hangzhou.personal.cr.aliyuncs.com
 
 ```bash
 # 拉取最新版本
-docker pull crpi-ds0j5gxjdmixc0v8.cn-hangzhou.personal.cr.aliyuncs.com/aliyun_lzq/travel_planner:latest
+# 注意：如果镜像是在 amd64 架构上构建的，在 ARM Mac (Apple Silicon) 上需要使用 --platform 参数
+docker pull --platform linux/amd64 crpi-ds0j5gxjdmixc0v8.cn-hangzhou.personal.cr.aliyuncs.com/aliyun_lzq/travel_planner:latest
 
 # 或者拉取特定版本（使用 commit SHA）
-docker pull crpi-ds0j5gxjdmixc0v8.cn-hangzhou.personal.cr.aliyuncs.com/aliyun_lzq/travel_planner:157dbf8ee34c42b60d1c4b6ac691aaf379c876b1
+docker pull --platform linux/amd64 crpi-ds0j5gxjdmixc0v8.cn-hangzhou.personal.cr.aliyuncs.com/aliyun_lzq/travel_planner:157dbf8ee34c42b60d1c4b6ac691aaf379c876b1
+
+# 在 Linux amd64 服务器上（不需要 --platform 参数）
+# docker pull crpi-ds0j5gxjdmixc0v8.cn-hangzhou.personal.cr.aliyuncs.com/aliyun_lzq/travel_planner:latest
 ```
+
+> **注意**：GitHub Actions 构建的镜像默认是 `linux/amd64` 架构。如果在 Apple Silicon (M1/M2/M3) Mac 上运行，需要使用 `--platform linux/amd64` 参数。Docker Desktop 会自动处理架构转换（使用 Rosetta 2）。
 
 ## 步骤 3: 配置环境变量
 
@@ -68,12 +74,22 @@ VITE_AMAP_KEY=your-amap-key
 
 ```bash
 # 运行容器
+# 注意：在 Apple Silicon Mac 上，如果镜像是 amd64 架构，需要添加 --platform 参数
 docker run -d \
   --name travel-planner \
+  --platform linux/amd64 \
   -p 3000:3000 \
   --env-file .env \
   --restart unless-stopped \
   crpi-ds0j5gxjdmixc0v8.cn-hangzhou.personal.cr.aliyuncs.com/aliyun_lzq/travel_planner:latest
+
+# 在 Linux amd64 服务器上（不需要 --platform 参数）
+# docker run -d \
+#   --name travel-planner \
+#   -p 3000:3000 \
+#   --env-file .env \
+#   --restart unless-stopped \
+#   crpi-ds0j5gxjdmixc0v8.cn-hangzhou.personal.cr.aliyuncs.com/aliyun_lzq/travel_planner:latest
 ```
 
 ### 方式 2: 使用 Docker Compose（推荐）
@@ -176,6 +192,25 @@ ls -la /app
 ls -la /app/dist
 ls -la /app/public
 ```
+
+### Q: 在 Apple Silicon Mac 上无法拉取镜像？
+
+**A: 使用 --platform 参数**
+
+```bash
+# 在 Apple Silicon Mac 上
+docker pull --platform linux/amd64 crpi-ds0j5gxjdmixc0v8.cn-hangzhou.personal.cr.aliyuncs.com/aliyun_lzq/travel_planner:latest
+
+# 运行容器时也需要指定平台
+docker run -d \
+  --name travel-planner \
+  --platform linux/amd64 \
+  -p 3000:3000 \
+  --env-file .env \
+  crpi-ds0j5gxjdmixc0v8.cn-hangzhou.personal.cr.aliyuncs.com/aliyun_lzq/travel_planner:latest
+```
+
+或者使用 `docker-compose.prod.yml`（已包含 `platform: linux/amd64` 配置）。
 
 ### Q: 容器无法启动怎么办？
 
