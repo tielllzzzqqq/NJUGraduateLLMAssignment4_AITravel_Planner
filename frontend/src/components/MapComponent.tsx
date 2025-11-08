@@ -134,33 +134,33 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
 
         // Load plugins and initialize map
         AMap.plugin(['AMap.Geocoder', 'AMap.Driving'], () => {
-            console.log('MapComponent: Plugins loaded, creating Geocoder');
+          console.log('MapComponent: Plugins loaded, creating Geocoder');
+          
+          try {
+            const geocoder = new AMap.Geocoder({
+              city: '全国', // 城市设为全国，默认会进行全国范围搜索
+              radius: 1000, // 搜索半径，单位米
+            });
+            console.log('MapComponent: Geocoder created:', geocoder);
             
-            try {
-              const geocoder = new AMap.Geocoder({
-                city: '全国', // 城市设为全国，默认会进行全国范围搜索
-                radius: 1000, // 搜索半径，单位米
-              });
-              console.log('MapComponent: Geocoder created:', geocoder);
-              
-              // Test geocoder is working
-              if (!geocoder || typeof geocoder.getLocation !== 'function') {
-                console.error('MapComponent: Geocoder is not properly initialized');
-                return;
-              }
-              
-              if (!mapInstance.current) {
-                console.error('MapComponent: Map instance is null');
-                return;
-              }
-              
-              console.log('MapComponent: Starting geocoding for destination and activities');
+            // Test geocoder is working
+            if (!geocoder || typeof geocoder.getLocation !== 'function') {
+              console.error('MapComponent: Geocoder is not properly initialized');
+              return;
+            }
+            
+            if (!mapInstance.current) {
+              console.error('MapComponent: Map instance is null');
+              return;
+            }
+            
+            console.log('MapComponent: Starting geocoding for destination and activities');
 
-          // Geocode all locations and then draw route
-          const geocodePromises: Promise<void>[] = [];
+            // Geocode all locations and then draw route
+            const geocodePromises: Promise<void>[] = [];
 
-          // First, geocode destination to set map center
-          const destinationPromise = new Promise<void>((resolve) => {
+            // First, geocode destination to set map center
+            const destinationPromise = new Promise<void>((resolve) => {
             console.log('MapComponent: Geocoding destination:', destination);
             
             // Add timeout to prevent hanging
@@ -174,8 +174,8 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
               console.log('MapComponent: Geocoder object:', geocoder);
               console.log('MapComponent: geocoder.getLocation type:', typeof geocoder.getLocation);
               
-              // Call getLocation
-              const result = geocoder.getLocation(destination, (status: string, result: any) => {
+              // Call getLocation (this method doesn't return a value, it uses callback)
+              geocoder.getLocation(destination, (status: string, result: any) => {
                 console.log('MapComponent: ===== CALLBACK EXECUTED =====');
                 clearTimeout(timeoutId);
                 console.log('MapComponent: Destination geocoding callback - status:', status);
@@ -210,11 +210,11 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
               console.error('MapComponent: Error in destination geocoding:', error);
               resolve();
             }
-          });
-          geocodePromises.push(destinationPromise);
+            });
+            geocodePromises.push(destinationPromise);
 
-          // Then, geocode all activities in order
-          activities.forEach((activity, index) => {
+            // Then, geocode all activities in order
+            activities.forEach((activity, index) => {
             const activityPromise = new Promise<void>((resolve) => {
               console.log(`MapComponent: Processing activity ${index + 1}:`, {
                 name: activity.name,
@@ -400,12 +400,12 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                 console.warn(`MapComponent: Activity ${index + 1} has no location or coordinates:`, activity);
                 resolve();
               }
+              });
+              geocodePromises.push(activityPromise);
             });
-            geocodePromises.push(activityPromise);
-          });
 
-          // Wait for all geocoding to complete, then draw route
-          Promise.all(geocodePromises).then(() => {
+            // Wait for all geocoding to complete, then draw route
+            Promise.all(geocodePromises).then(() => {
             console.log('MapComponent: All geocoding completed', {
               activityPointsCount: activityPoints.length,
               markersCount: markers.length,
@@ -500,6 +500,9 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
               );
             }
           });
+          } catch (error) {
+            console.error('MapComponent: Error in plugin initialization:', error);
+          }
         });
       } catch (error: any) {
         console.error('Map initialization error:', error);
