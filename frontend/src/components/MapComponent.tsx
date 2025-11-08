@@ -77,8 +77,8 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
               resolve(true);
             };
             
-            // Load AMap with Geocoder, Driving, Transfer, and PlaceSearch plugins
-            script.src = `https://webapi.amap.com/maps?v=2.0&key=${amapKey}&plugin=AMap.Geocoder,AMap.Driving,AMap.Transfer,AMap.PlaceSearch&callback=${callbackName}`;
+            // Load AMap with Driving plugin for route planning
+            script.src = `https://webapi.amap.com/maps?v=2.0&key=${amapKey}&plugin=AMap.Driving&callback=${callbackName}`;
             script.async = true;
             script.onerror = () => {
               delete (window as any)[callbackName];
@@ -177,35 +177,13 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
         mapInstance.current.on('complete', () => {
           console.log('MapComponent: Map fully loaded, loading plugins');
           
-          // Load plugins and initialize geocoding
-          AMap.plugin(['AMap.Geocoder', 'AMap.Driving', 'AMap.PlaceSearch'], () => {
-            console.log('MapComponent: Plugins loaded, creating Geocoder and PlaceSearch');
+          // Load plugins for route planning
+          AMap.plugin(['AMap.Driving'], () => {
+            console.log('MapComponent: Plugins loaded');
             
             // Wait a bit to ensure plugins are ready
             setTimeout(() => {
               try {
-                // Try using PlaceSearch as primary method (more reliable)
-                const placeSearch = new AMap.PlaceSearch({
-                  city: destination || '全国',
-                  citylimit: true,
-                  type: '',
-                  pageSize: 5, // Increase to get more results
-                  pageIndex: 1,
-                });
-                
-                const geocoder = new AMap.Geocoder({
-                  city: destination || '全国', // Use destination city if available
-                  radius: 1000, // 搜索半径，单位米
-                });
-                console.log('MapComponent: Geocoder and PlaceSearch created');
-                
-                // Test geocoder is working
-                if (!geocoder || typeof geocoder.getLocation !== 'function') {
-                  console.error('MapComponent: Geocoder is not properly initialized');
-                  console.error('MapComponent: Please check if your API Key has Geocoding service enabled');
-                  // Continue anyway, we'll use PlaceSearch
-                }
-                
                 if (!mapInstance.current) {
                   console.error('MapComponent: Map instance is null');
                   return;
