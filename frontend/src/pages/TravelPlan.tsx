@@ -67,7 +67,6 @@ export default function TravelPlan() {
   }
 
   const currentDay = planData.itinerary[selectedDay];
-  const allActivities = planData.itinerary.flatMap(day => day.activities);
 
   return (
     <div className="container">
