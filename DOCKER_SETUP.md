@@ -11,19 +11,21 @@
 
 ### 步骤 2: 配置所需的 Secrets
 
-需要配置以下 **3 个 Repository secrets**：
+需要配置以下 **2 个 Repository secrets**：
 
 #### 1. ALIBABA_CLOUD_USERNAME
 - **Name**: `ALIBABA_CLOUD_USERNAME`
-- **Value**: 你的阿里云容器镜像服务用户名（通常是阿里云账号）
+- **Value**: 你的完整阿里云账号名（例如：`aliyun4681828459`）
+  - 注意：必须是完整的账号名，不是邮箱或手机号
+  - 在阿里云控制台的右上角可以看到你的账号名
 
 #### 2. ALIBABA_CLOUD_PASSWORD
 - **Name**: `ALIBABA_CLOUD_PASSWORD`
-- **Value**: 你的阿里云容器镜像服务密码（登录密码或访问凭证）
+- **Value**: 你的 Docker 登录密码
+  - 这是在容器镜像服务中设置的 Docker 登录密码
+  - 如果还没有设置，请访问：https://cr.console.aliyun.com/ → 访问凭证 → 设置 Docker 登录密码
 
-#### 3. ALIBABA_CLOUD_NAMESPACE
-- **Name**: `ALIBABA_CLOUD_NAMESPACE`
-- **Value**: 你的容器镜像服务命名空间（例如：`your-namespace`）
+> **注意**：命名空间（NAMESPACE）和镜像名称（IMAGE_NAME）现在直接在工作流文件中配置，无需在 Secrets 中设置。
 
 ## 获取阿里云容器镜像服务凭证
 
@@ -32,35 +34,41 @@
 1. 访问：https://cr.console.aliyun.com/
 2. 使用你的阿里云账号登录
 
-### 步骤 2: 创建命名空间（如果还没有）
+### 步骤 2: 确认命名空间和仓库
 
-1. 点击左侧菜单 **命名空间**
-2. 点击 **创建命名空间**
-3. 输入命名空间名称（例如：`travel-planner`）
-4. 选择地域（例如：`华东1（杭州）`）
-5. 点击 **确定**
+根据你提供的信息：
+- **命名空间**: `aliyun_lzq`
+- **仓库名称**: `travel_planner`
+- **Registry 地址**: `crpi-ds0j5gxjdmixc0v8.cn-hangzhou.personal.cr.aliyuncs.com`
+
+如果你的命名空间不同，需要修改 `.github/workflows/docker-build.yml` 文件中的 `NAMESPACE` 和 `IMAGE_NAME` 环境变量。
 
 ### 步骤 3: 获取访问凭证
 
 有两种方式获取访问凭证：
 
-#### 方式 1: 使用阿里云账号密码
-- **Username**: 你的阿里云账号（通常是手机号或邮箱）
-- **Password**: 你的阿里云账号登录密码
+#### 重要：个人版容器镜像服务的认证方式
 
-#### 方式 2: 使用访问凭证（推荐，更安全）
+对于个人版容器镜像服务，需要使用：
+- **Username**: 你的**完整阿里云账号名**（例如：`aliyun4681828459`）
+  - 不是邮箱，不是手机号，是完整的账号名
+  - 可以在阿里云控制台右上角看到
+- **Password**: 你的 **Docker 登录密码**
+  - 这是在容器镜像服务中单独设置的密码
+  - 访问：https://cr.console.aliyun.com/ → 点击右上角头像 → **访问凭证** → 设置 **Docker 登录密码**
 
-1. 在容器镜像服务控制台，点击右上角头像
-2. 选择 **访问凭证**
-3. 设置 **Docker 登录密码**（如果还没有设置）
-4. 设置密码后，可以使用：
-   - **Username**: 你的阿里云账号
-   - **Password**: 你设置的 Docker 登录密码
+> **注意**：如果还没有设置 Docker 登录密码，请先设置。这个密码与你的阿里云账号登录密码是分开的。
 
-### 步骤 4: 确认地域和 Registry 地址
+### 步骤 4: 确认 Registry 地址
 
-- **Registry 地址**: `registry.cn-hangzhou.aliyuncs.com`（华东1-杭州）
-- 如果你的命名空间在其他地域，需要修改工作流文件中的 `REGISTRY` 环境变量
+- **个人版 Registry 地址**: `crpi-ds0j5gxjdmixc0v8.cn-hangzhou.personal.cr.aliyuncs.com`
+  - 这是你的个人版容器镜像服务的公网地址
+  - 每个用户的地址都不同
+  - 可以在仓库的"操作指南"中看到
+
+- **企业版 Registry 地址**: `registry.cn-hangzhou.aliyuncs.com`（仅适用于企业版）
+
+> **重要**：工作流文件已经配置为使用个人版地址。如果你的地址不同，请修改 `.github/workflows/docker-build.yml` 文件中的 `REGISTRY` 环境变量。
 
 ## 验证配置
 
@@ -102,6 +110,27 @@ git push
 - **Environment secrets**: 适用于需要不同环境（如 dev/staging/prod）的场景，需要额外配置环境
 
 对于这个项目，使用 **Repository secrets** 就足够了。
+
+### Q: 403 Forbidden 错误怎么办？
+
+**A: 检查以下几点**
+
+1. **Registry 地址是否正确**
+   - 个人版使用：`crpi-xxxxx.cn-hangzhou.personal.cr.aliyuncs.com`
+   - 企业版使用：`registry.cn-hangzhou.aliyuncs.com`
+   - 确认工作流文件中的 `REGISTRY` 环境变量是正确的
+
+2. **用户名是否正确**
+   - 必须使用完整的阿里云账号名（例如：`aliyun4681828459`）
+   - 不是邮箱，不是手机号
+   - 在阿里云控制台右上角可以看到
+
+3. **密码是否正确**
+   - 必须使用 Docker 登录密码，不是阿里云账号登录密码
+   - 在容器镜像服务控制台的"访问凭证"页面设置
+
+4. **命名空间和仓库名称是否正确**
+   - 确认工作流文件中的 `NAMESPACE` 和 `IMAGE_NAME` 与你的仓库配置一致
 
 ### Q: 如果我的命名空间在其他地域怎么办？
 

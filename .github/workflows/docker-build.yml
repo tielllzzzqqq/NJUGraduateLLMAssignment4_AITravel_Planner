@@ -12,8 +12,12 @@ on:
   workflow_dispatch: # Allow manual triggering
 
 env:
-  REGISTRY: registry.cn-hangzhou.aliyuncs.com
-  IMAGE_NAME: travel-planner
+  # 使用个人版容器镜像服务的公网地址
+  REGISTRY: crpi-ds0j5gxjdmixc0v8.cn-hangzhou.personal.cr.aliyuncs.com
+  # 命名空间
+  NAMESPACE: aliyun_lzq
+  # 镜像名称
+  IMAGE_NAME: travel_planner
 
 jobs:
   build-and-push:
@@ -25,12 +29,11 @@ jobs:
       - name: Check Docker secrets configuration
         id: check-secrets
         run: |
-          if [ -z "${{ secrets.ALIBABA_CLOUD_USERNAME }}" ] || [ -z "${{ secrets.ALIBABA_CLOUD_PASSWORD }}" ] || [ -z "${{ secrets.ALIBABA_CLOUD_NAMESPACE }}" ]; then
+          if [ -z "${{ secrets.ALIBABA_CLOUD_USERNAME }}" ] || [ -z "${{ secrets.ALIBABA_CLOUD_PASSWORD }}" ]; then
             echo "Docker registry secrets are not configured."
             echo "Please configure the following Repository secrets:"
-            echo "  - ALIBABA_CLOUD_USERNAME"
-            echo "  - ALIBABA_CLOUD_PASSWORD"
-            echo "  - ALIBABA_CLOUD_NAMESPACE"
+            echo "  - ALIBABA_CLOUD_USERNAME (your full Alibaba Cloud account name, e.g., aliyun4681828459)"
+            echo "  - ALIBABA_CLOUD_PASSWORD (your Docker login password)"
             echo "See DOCKER_SETUP.md for detailed instructions."
             echo "secrets_configured=false" >> $GITHUB_OUTPUT
           else
@@ -57,8 +60,8 @@ jobs:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ${{ env.REGISTRY }}/${{ secrets.ALIBABA_CLOUD_NAMESPACE }}/${{ env.IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ secrets.ALIBABA_CLOUD_NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ secrets.ALIBABA_CLOUD_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ secrets.ALIBABA_CLOUD_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
 
