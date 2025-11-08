@@ -30,3 +30,14 @@ QUICK_START_DOCKER.md
 VERIFY_DEPLOYMENT.md
 TROUBLESHOOTING.md
 docker-daemon-config.json
+
+# Local build and test scripts (only use GitHub Actions)
+build-docker-local.sh
+build-with-mirror.sh
+check-container.sh
+quick-verify.sh
+setup-docker-mirror.sh
+start-docker.sh
+test-docker-run.sh
+verify-deployment.sh
+Dockerfile.mirror

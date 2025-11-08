@@ -4,9 +4,11 @@
 
 ## 前提条件
 
-1. 已安装 Docker 和 Docker Compose
-2. 已配置阿里云容器镜像服务访问凭证
-3. 已准备好 `.env` 配置文件
+1. **已安装 Docker 和 Docker Compose**
+2. **已配置 GitHub Secrets**（用于 GitHub Actions 构建）
+   - 参考 `DOCKER_SETUP.md` 配置 GitHub Secrets
+3. **已准备好 `.env` 配置文件**（用于运行时环境变量）
+4. **GitHub Actions 已成功构建镜像**（检查 Actions 页面确认构建成功）
 
 ## 步骤 1: 登录阿里云容器镜像服务
 
@@ -163,35 +165,21 @@ docker logs travel-planner | grep -E "Supabase|LLM|Server is running"
 
 **问题**：前端环境变量（`VITE_*`）需要在**构建 Docker 镜像时**传入，不能在运行时修改。
 
-#### 如果使用 GitHub Actions 构建的镜像
+#### GitHub Actions 构建配置
 
-需要在 GitHub Secrets 中配置以下前端环境变量：
-- `VITE_API_URL` - API 地址（例如：`http://localhost:3000/api`）
-- `VITE_SUPABASE_URL` - Supabase URL
-- `VITE_SUPABASE_ANON_KEY` - Supabase Anon Key  
-- `VITE_AMAP_KEY` - 高德地图 API Key
+本项目使用 GitHub Actions 自动构建 Docker 镜像。需要在 GitHub Secrets 中配置以下前端环境变量：
 
-#### 如果本地构建镜像
+1. **VITE_API_URL** - API 地址（默认：`/api`，相对路径）
+2. **VITE_SUPABASE_URL** - Supabase 项目 URL
+3. **VITE_SUPABASE_ANON_KEY** - Supabase Anon Key  
+4. **VITE_AMAP_KEY** - 高德地图 API Key
 
-使用提供的构建脚本：
+配置方法：
+1. 访问 GitHub 仓库 Settings → Secrets and variables → Actions
+2. 添加上述 Secrets
+3. 推送代码或手动触发 GitHub Actions 构建
 
-```bash
-# 确保 frontend/.env 文件存在并配置正确
-# 或确保根目录 .env 包含前端环境变量
-./build-docker-local.sh
-```
-
-或手动构建：
-
-```bash
-docker build \
-  --build-arg VITE_API_URL="http://localhost:3000/api" \
-  --build-arg VITE_SUPABASE_URL="https://your-project.supabase.co" \
-  --build-arg VITE_SUPABASE_ANON_KEY="your-anon-key" \
-  --build-arg VITE_AMAP_KEY="your-amap-key" \
-  -t travel-planner:latest \
-  .
-```
+详细配置说明请参考 `DOCKER_SETUP.md`。
 
 ## 步骤 4: 运行容器
 
@@ -369,12 +357,10 @@ docker run -d \
    ```
 
 5. **重新构建镜像（如果环境变量不正确）**
-   ```bash
-   # 使用本地构建脚本
-   ./build-docker-local.sh
-   
-   # 或使用 GitHub Actions（需要在 Secrets 中配置前端环境变量）
-   ```
+   - 在 GitHub Secrets 中配置正确的前端环境变量
+   - 触发 GitHub Actions 重新构建（推送代码或手动触发）
+   - 拉取新镜像：`docker-compose -f docker-compose.prod.yml pull`
+   - 重启容器：`docker-compose -f docker-compose.prod.yml up -d`
 
 ### Q: 容器无法启动怎么办？
 
@@ -458,57 +444,26 @@ services:
         max-file: "3"
 ```
 
-## 快速验证脚本
+## 快速验证
 
-创建一个 `verify-deployment.sh` 脚本：
+使用以下命令验证部署：
 
 ```bash
-#!/bin/bash
-
-echo "=== 验证 Docker 部署 ==="
-
-# 检查容器是否运行
-if docker ps | grep -q travel-planner; then
-    echo "✓ 容器正在运行"
-else
-    echo "✗ 容器未运行"
-    exit 1
-fi
+# 检查容器状态
+docker ps | grep travel-planner
 
 # 检查健康状态
-HEALTH=$(docker inspect travel-planner --format='{{.State.Health.Status}}' 2>/dev/null)
-if [ "$HEALTH" = "healthy" ]; then
-    echo "✓ 容器健康状态: $HEALTH"
-else
-    echo "⚠ 容器健康状态: ${HEALTH:-unknown}"
-fi
+docker inspect travel-planner --format='{{.State.Health.Status}}'
 
 # 测试健康检查端点
-RESPONSE=$(curl -s http://localhost:3000/health)
-if echo "$RESPONSE" | grep -q "ok"; then
-    echo "✓ 健康检查通过: $RESPONSE"
-else
-    echo "✗ 健康检查失败: $RESPONSE"
-    exit 1
-fi
+curl http://localhost:3000/health
 
-# 检查端口
-if netstat -tuln 2>/dev/null | grep -q ":3000 " || ss -tuln 2>/dev/null | grep -q ":3000 "; then
-    echo "✓ 端口 3000 正在监听"
-else
-    echo "✗ 端口 3000 未监听"
-    exit 1
-fi
+# 查看日志
+docker logs travel-planner
 
-echo ""
-echo "=== 部署验证完成 ==="
-echo "应用地址: http://localhost:3000"
-```
-
-使用方法：
-
-```bash
-chmod +x verify-deployment.sh
-./verify-deployment.sh
+# 访问应用
+# 前端: http://localhost:3000
+# API: http://localhost:3000/api
+# 健康检查: http://localhost:3000/health
 ```
 
