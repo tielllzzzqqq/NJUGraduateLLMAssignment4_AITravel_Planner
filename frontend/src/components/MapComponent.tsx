@@ -24,6 +24,12 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
   useEffect(() => {
     if (!mapContainer.current) return;
 
+    console.log('MapComponent: Initializing map with:', {
+      destination,
+      activitiesCount: activities.length,
+      activities: activities.map(a => ({ name: a.name, location: a.location, hasCoordinates: !!(a.coordinates?.lat && a.coordinates?.lng) }))
+    });
+
     const initMap = async () => {
       const amapKey = import.meta.env.VITE_AMAP_KEY;
       
@@ -98,6 +104,8 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
           center: [116.397428, 39.90923], // Default to Beijing, will be updated
         });
 
+        console.log('MapComponent: Map initialized');
+
         // Store markers and route points (ordered by activity sequence)
         const markers: any[] = [];
         const activityPoints: Array<{ lng: number; lat: number; name: string; index: number }> = [];
@@ -135,20 +143,24 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
 
           // First, geocode destination to set map center
           const destinationPromise = new Promise<void>((resolve) => {
+            console.log('MapComponent: Geocoding destination:', destination);
             geocoder.getLocation(destination, (status: string, result: any) => {
+              console.log('MapComponent: Destination geocoding result:', status, result);
               if (status === 'complete' && result.geocodes && result.geocodes.length > 0) {
                 const location = result.geocodes[0].location;
                 if (location && location.lng && location.lat) {
                   destinationLocation = { lng: location.lng, lat: location.lat };
+                  console.log('MapComponent: Destination location found:', destinationLocation);
                   // Set map center to destination
                   mapInstance.current.setCenter([location.lng, location.lat]);
                   mapInstance.current.setZoom(13);
                   resolve();
                 } else {
+                  console.warn('MapComponent: Destination location invalid:', location);
                   resolve();
                 }
               } else {
-                console.warn('Geocoding failed for destination:', destination, status);
+                console.warn('MapComponent: Geocoding failed for destination:', destination, status, result);
                 resolve();
               }
             });
@@ -158,6 +170,13 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
           // Then, geocode all activities in order
           activities.forEach((activity, index) => {
             const activityPromise = new Promise<void>((resolve) => {
+              console.log(`MapComponent: Processing activity ${index + 1}:`, {
+                name: activity.name,
+                location: activity.location,
+                hasCoordinates: !!(activity.coordinates?.lat && activity.coordinates?.lng),
+                coordinates: activity.coordinates
+              });
+
               if (activity.coordinates && activity.coordinates.lng && activity.coordinates.lat) {
                 // Use existing coordinates
                 const pos = { 
@@ -167,6 +186,7 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                   index: index
                 };
                 activityPoints.push(pos);
+                console.log(`MapComponent: Added activity ${index + 1} with existing coordinates:`, pos);
 
                 // Add marker
                 const marker = new AMap.Marker({
@@ -191,7 +211,18 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                 resolve();
               } else if (activity.location) {
                 // Geocode activity location
-                geocoder.getLocation(activity.location, (status: string, result: any) => {
+                console.log(`MapComponent: Geocoding activity location: ${activity.location}`);
+                // Try to geocode with the full location string first
+                let geocodeQuery = activity.location;
+                
+                // If location is very specific (contains address), use it directly
+                // Otherwise, try combining with destination
+                if (!geocodeQuery.includes('市') && !geocodeQuery.includes('区') && !geocodeQuery.includes('县')) {
+                  geocodeQuery = `${destination}${activity.location}`;
+                }
+                
+                geocoder.getLocation(geocodeQuery, (status: string, result: any) => {
+                  console.log(`MapComponent: Activity ${index + 1} geocoding result:`, status, result);
                   if (status === 'complete' && result.geocodes && result.geocodes.length > 0) {
                     const location = result.geocodes[0].location;
                     if (location && location.lng && location.lat) {
@@ -202,6 +233,7 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                         index: index
                       };
                       activityPoints.push(pos);
+                      console.log(`MapComponent: Added activity ${index + 1} with geocoded coordinates:`, pos);
 
                       // Add marker
                       const marker = new AMap.Marker({
@@ -223,11 +255,57 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                         },
                       });
                       markers.push(marker);
+                    } else {
+                      console.warn(`MapComponent: Activity ${index + 1} location invalid:`, location);
+                    }
+                  } else {
+                    console.warn(`MapComponent: Geocoding failed for activity ${index + 1}:`, activity.location, status);
+                    // Try fallback: use activity name + destination
+                    if (activity.name !== activity.location) {
+                      console.log(`MapComponent: Trying fallback geocoding with name: ${activity.name}`);
+                      geocoder.getLocation(`${destination}${activity.name}`, (fallbackStatus: string, fallbackResult: any) => {
+                        if (fallbackStatus === 'complete' && fallbackResult.geocodes && fallbackResult.geocodes.length > 0) {
+                          const location = fallbackResult.geocodes[0].location;
+                          if (location && location.lng && location.lat) {
+                            const pos = {
+                              lng: location.lng,
+                              lat: location.lat,
+                              name: activity.name,
+                              index: index
+                            };
+                            activityPoints.push(pos);
+                            console.log(`MapComponent: Added activity ${index + 1} with fallback coordinates:`, pos);
+
+                            const marker = new AMap.Marker({
+                              position: [location.lng, location.lat],
+                              title: activity.name,
+                              map: mapInstance.current,
+                              icon: new AMap.Icon({
+                                size: new AMap.Size(28, 28),
+                                image: activity.type === 'attraction' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png' :
+                                       activity.type === 'restaurant' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_r.png' :
+                                       activity.type === 'transport' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_g.png' :
+                                       'https://webapi.amap.com/theme/v1.3/markers/n/mark_p.png',
+                                imageOffset: new AMap.Pixel(0, 0),
+                                imageSize: new AMap.Size(28, 28),
+                              }),
+                              label: {
+                                content: `${index + 1}. ${activity.name}`,
+                                direction: 'right',
+                              },
+                            });
+                            markers.push(marker);
+                          }
+                        }
+                        resolve();
+                      });
+                    } else {
+                      resolve();
                     }
                   }
-                  resolve();
                 });
               } else {
+                console.warn(`MapComponent: Activity ${index + 1} has no location or coordinates:`, activity);
                 resolve();
               }
             });
@@ -236,8 +314,15 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
 
           // Wait for all geocoding to complete, then draw route
           Promise.all(geocodePromises).then(() => {
+            console.log('MapComponent: All geocoding completed', {
+              activityPointsCount: activityPoints.length,
+              markersCount: markers.length,
+              destinationLocation
+            });
+
             // Sort activity points by index to maintain order
             activityPoints.sort((a, b) => a.index - b.index);
+            console.log('MapComponent: Sorted activity points:', activityPoints);
 
             // Update map center if we have activity points
             if (activityPoints.length > 0) {
@@ -247,20 +332,28 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                 markers.forEach(marker => {
                   bounds.extend(marker.getPosition());
                 });
+                console.log('MapComponent: Setting map bounds to show all markers');
                 // Add some padding
                 mapInstance.current.setBounds(bounds, false, [20, 20, 20, 20]);
               } else if (destinationLocation) {
+                console.log('MapComponent: No markers, centering on destination');
                 mapInstance.current.setCenter([destinationLocation.lng, destinationLocation.lat]);
                 mapInstance.current.setZoom(13);
               }
             } else if (destinationLocation) {
+              console.log('MapComponent: No activity points, centering on destination');
               mapInstance.current.setCenter([destinationLocation.lng, destinationLocation.lat]);
               mapInstance.current.setZoom(13);
+            } else {
+              console.warn('MapComponent: No destination location and no activity points, map will show default location');
             }
 
             // Draw route between activity points in sequence
             if (activityPoints.length < 2) {
-              console.warn('Not enough activity points to draw route');
+              console.warn('MapComponent: Not enough activity points to draw route', {
+                activityPointsCount: activityPoints.length,
+                activitiesCount: activities.length
+              });
               return;
             }
 
