@@ -1,8 +1,30 @@
 #!/bin/bash
 
-# 使用阿里云镜像源构建 Docker 镜像
+# 使用配置了镜像加速器的 Docker 构建镜像
+# 注意：需要先配置 Docker 镜像加速器（运行 ./setup-docker-mirror.sh 或手动配置）
 
-echo "=== 使用阿里云镜像源构建 Docker 镜像 ==="
+echo "=== 构建 Docker 镜像 ==="
+echo ""
+echo "注意：此脚本使用标准的 Dockerfile"
+echo "请确保已配置 Docker 镜像加速器（运行 ./setup-docker-mirror.sh）"
+echo ""
+
+# 检查 Docker 镜像加速器是否配置
+if docker info 2>/dev/null | grep -q "Registry Mirrors"; then
+    echo "✓ Docker 镜像加速器已配置"
+    docker info | grep -A 5 "Registry Mirrors"
+else
+    echo "⚠ 警告: 未检测到 Docker 镜像加速器配置"
+    echo "建议运行: ./setup-docker-mirror.sh"
+    echo "或者手动在 Docker Desktop 中配置"
+    echo ""
+    read -p "是否继续构建？(y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        exit 1
+    fi
+fi
+
 echo ""
 
 # 检查 .env 文件
@@ -29,8 +51,8 @@ echo "  VITE_AMAP_KEY: ${VITE_AMAP_KEY:-未设置}"
 echo ""
 
 # 构建镜像
-echo "开始构建..."
-docker build -f Dockerfile.mirror \
+echo "开始构建（使用标准 Dockerfile，通过镜像加速器拉取基础镜像）..."
+docker build -f Dockerfile \
   --build-arg VITE_API_URL=/api \
   --build-arg VITE_SUPABASE_URL="${VITE_SUPABASE_URL:-}" \
   --build-arg VITE_SUPABASE_ANON_KEY="${VITE_SUPABASE_ANON_KEY:-}" \
