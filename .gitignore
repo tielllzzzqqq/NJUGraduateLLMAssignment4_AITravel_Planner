@@ -20,3 +20,13 @@ coverage/
 # OS
 Thumbs.db
 
+# Documentation files (may contain sensitive information or are too verbose)
+ENV_CHECK_REPORT.md
+CONFIGURATION_CHECKLIST.md
+DOCKER_BUILD_TROUBLESHOOTING.md
+DOCKER_TROUBLESHOOTING.md
+DOCKER_FRONTEND_ENV.md
+QUICK_START_DOCKER.md
+VERIFY_DEPLOYMENT.md
+TROUBLESHOOTING.md
+docker-daemon-config.json
