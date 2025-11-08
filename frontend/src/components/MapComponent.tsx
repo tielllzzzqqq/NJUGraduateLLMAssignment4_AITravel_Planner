@@ -196,10 +196,21 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                 
                 // Helper function to validate coordinates (China: lng 73-135, lat 18-54)
                 const validateCoordinates = (lng: number, lat: number): boolean => {
-                  if (!lng || !lat || isNaN(lng) || isNaN(lat)) return false;
-                  // China coordinates range
+                  if (!lng || !lat || isNaN(lng) || isNaN(lat)) {
+                    console.warn(`MapComponent: Invalid coordinates (NaN or null): lng=${lng}, lat=${lat}`);
+                    return false;
+                  }
+                  // China coordinates range - strict validation
+                  // Longitude: 73-135 (East-West)
+                  // Latitude: 18-54 (North-South)
                   if (lng < 73 || lng > 135 || lat < 18 || lat > 54) {
                     console.warn(`MapComponent: Invalid coordinates (outside China): lng=${lng}, lat=${lat}`);
+                    console.warn(`MapComponent: Expected range - lng: 73-135, lat: 18-54`);
+                    return false;
+                  }
+                  // Additional check: if lng is negative or very large, it's likely wrong
+                  if (lng < 0 || lng > 180 || lat < -90 || lat > 90) {
+                    console.warn(`MapComponent: Invalid coordinates (out of valid range): lng=${lng}, lat=${lat}`);
                     return false;
                   }
                   return true;
@@ -479,19 +490,44 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                       // Fit map bounds to show all markers
                       if (markers.length > 0) {
                         const bounds = new AMap.Bounds();
+                        let validMarkers = 0;
                         markers.forEach(marker => {
-                          bounds.extend(marker.getPosition());
+                          try {
+                            const pos = marker.getPosition();
+                            if (pos && validateCoordinates(pos.lng, pos.lat)) {
+                              bounds.extend(pos);
+                              validMarkers++;
+                            } else {
+                              console.warn(`MapComponent: Invalid marker position:`, pos);
+                            }
+                          } catch (e) {
+                            console.warn(`MapComponent: Error getting marker position:`, e);
+                          }
                         });
-                        console.log('MapComponent: Setting map bounds to show all markers');
-                        // Add some padding
-                        mapInstance.current.setBounds(bounds, false, [20, 20, 20, 20]);
-                      } else if (destinationLocation) {
-                        console.log('MapComponent: No markers, centering on destination');
+                        
+                        if (validMarkers > 0) {
+                          console.log(`MapComponent: Setting map bounds to show ${validMarkers} valid markers`);
+                          // Add some padding
+                          mapInstance.current.setBounds(bounds, false, [20, 20, 20, 20]);
+                          
+                          // Verify bounds
+                          const currentCenter = mapInstance.current.getCenter();
+                          console.log(`MapComponent: Map center after setBounds:`, currentCenter);
+                        } else {
+                          console.warn('MapComponent: No valid markers, centering on destination');
+                          if (destinationLocation && validateCoordinates(destinationLocation.lng, destinationLocation.lat)) {
+                            console.log(`MapComponent: Centering on destination [${destinationLocation.lng}, ${destinationLocation.lat}]`);
+                            mapInstance.current.setCenter([destinationLocation.lng, destinationLocation.lat]);
+                            mapInstance.current.setZoom(13);
+                          }
+                        }
+                      } else if (destinationLocation && validateCoordinates(destinationLocation.lng, destinationLocation.lat)) {
+                        console.log(`MapComponent: No markers, centering on destination [${destinationLocation.lng}, ${destinationLocation.lat}]`);
                         mapInstance.current.setCenter([destinationLocation.lng, destinationLocation.lat]);
                         mapInstance.current.setZoom(13);
                       }
-                    } else if (destinationLocation) {
-                      console.log('MapComponent: No activity points, centering on destination');
+                    } else if (destinationLocation && validateCoordinates(destinationLocation.lng, destinationLocation.lat)) {
+                      console.log(`MapComponent: No activity points, centering on destination [${destinationLocation.lng}, ${destinationLocation.lat}]`);
                       mapInstance.current.setCenter([destinationLocation.lng, destinationLocation.lat]);
                       mapInstance.current.setZoom(13);
                     } else {
