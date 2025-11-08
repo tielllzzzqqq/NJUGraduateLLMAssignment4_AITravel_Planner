@@ -60,8 +60,8 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
               resolve(true);
             };
             
-            // Load AMap with Geocoder plugin
-            script.src = `https://webapi.amap.com/maps?v=2.0&key=${amapKey}&plugin=AMap.Geocoder&callback=${callbackName}`;
+            // Load AMap with Geocoder and Driving plugins for route planning
+            script.src = `https://webapi.amap.com/maps?v=2.0&key=${amapKey}&plugin=AMap.Geocoder,AMap.Driving,AMap.Transfer&callback=${callbackName}`;
             script.async = true;
             script.onerror = () => {
               delete (window as any)[callbackName];
@@ -92,60 +92,227 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
           throw new Error('AMap not available');
         }
 
-        // Initialize map
+        // Initialize map with default center (will be updated after geocoding)
         mapInstance.current = new AMap.Map(mapContainer.current, {
           zoom: 13,
-          center: [116.397428, 39.90923], // Default to Beijing
+          center: [116.397428, 39.90923], // Default to Beijing, will be updated
         });
 
-        // Load Geocoder plugin and use it
-        AMap.plugin('AMap.Geocoder', () => {
+        // Store markers and route points (ordered by activity sequence)
+        const markers: any[] = [];
+        const activityPoints: Array<{ lng: number; lat: number; name: string; index: number }> = [];
+        let destinationLocation: { lng: number; lat: number } | null = null;
+
+        // Fallback: draw simple polyline if route planning fails
+        const drawSimpleRoute = (points: Array<{ lng: number; lat: number }>) => {
+          if (points.length < 2 || !mapInstance.current) return;
+
+          const path = points.map(p => [p.lng, p.lat]);
+          const polyline = new AMap.Polyline({
+            path: path,
+            isOutline: true,
+            outlineColor: '#ffeeff',
+            borderWeight: 3,
+            strokeColor: '#3366FF',
+            strokeOpacity: 1,
+            strokeWeight: 6,
+            strokeStyle: 'solid',
+            lineJoin: 'round',
+            lineCap: 'round',
+            zIndex: 50,
+          });
+          mapInstance.current.add(polyline);
+        };
+
+        // Load plugins and initialize map
+        AMap.plugin(['AMap.Geocoder', 'AMap.Driving'], () => {
           const geocoder = new AMap.Geocoder({
             city: '全国', // 城市设为全国，默认会进行全国范围搜索
           });
 
-          // Geocode destination to get coordinates
-          geocoder.getLocation(destination, (status: string, result: any) => {
-            if (status === 'complete' && result.geocodes && result.geocodes.length > 0) {
-              const location = result.geocodes[0].location;
-              if (location && location.lng && location.lat) {
-                mapInstance.current.setCenter([location.lng, location.lat]);
-                mapInstance.current.setZoom(13);
+          // Geocode all locations and then draw route
+          const geocodePromises: Promise<void>[] = [];
 
-                // Add marker for destination
-                new AMap.Marker({
-                  position: [location.lng, location.lat],
-                  title: destination,
-                  map: mapInstance.current,
-                });
+          // First, geocode destination to set map center
+          const destinationPromise = new Promise<void>((resolve) => {
+            geocoder.getLocation(destination, (status: string, result: any) => {
+              if (status === 'complete' && result.geocodes && result.geocodes.length > 0) {
+                const location = result.geocodes[0].location;
+                if (location && location.lng && location.lat) {
+                  destinationLocation = { lng: location.lng, lat: location.lat };
+                  // Set map center to destination
+                  mapInstance.current.setCenter([location.lng, location.lat]);
+                  mapInstance.current.setZoom(13);
+                  resolve();
+                } else {
+                  resolve();
+                }
+              } else {
+                console.warn('Geocoding failed for destination:', destination, status);
+                resolve();
               }
-            } else {
-              console.warn('Geocoding failed for destination:', destination, status);
-            }
+            });
+          });
+          geocodePromises.push(destinationPromise);
+
+          // Then, geocode all activities in order
+          activities.forEach((activity, index) => {
+            const activityPromise = new Promise<void>((resolve) => {
+              if (activity.coordinates && activity.coordinates.lng && activity.coordinates.lat) {
+                // Use existing coordinates
+                const pos = { 
+                  lng: activity.coordinates.lng, 
+                  lat: activity.coordinates.lat,
+                  name: activity.name,
+                  index: index
+                };
+                activityPoints.push(pos);
+
+                // Add marker
+                const marker = new AMap.Marker({
+                  position: [pos.lng, pos.lat],
+                  title: activity.name,
+                  map: mapInstance.current,
+                  icon: new AMap.Icon({
+                    size: new AMap.Size(28, 28),
+                    image: activity.type === 'attraction' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png' :
+                           activity.type === 'restaurant' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_r.png' :
+                           activity.type === 'transport' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_g.png' :
+                           'https://webapi.amap.com/theme/v1.3/markers/n/mark_p.png',
+                    imageOffset: new AMap.Pixel(0, 0),
+                    imageSize: new AMap.Size(28, 28),
+                  }),
+                  label: {
+                    content: `${index + 1}. ${activity.name}`,
+                    direction: 'right',
+                  },
+                });
+                markers.push(marker);
+                resolve();
+              } else if (activity.location) {
+                // Geocode activity location
+                geocoder.getLocation(activity.location, (status: string, result: any) => {
+                  if (status === 'complete' && result.geocodes && result.geocodes.length > 0) {
+                    const location = result.geocodes[0].location;
+                    if (location && location.lng && location.lat) {
+                      const pos = {
+                        lng: location.lng,
+                        lat: location.lat,
+                        name: activity.name,
+                        index: index
+                      };
+                      activityPoints.push(pos);
+
+                      // Add marker
+                      const marker = new AMap.Marker({
+                        position: [location.lng, location.lat],
+                        title: activity.name,
+                        map: mapInstance.current,
+                        icon: new AMap.Icon({
+                          size: new AMap.Size(28, 28),
+                          image: activity.type === 'attraction' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png' :
+                                 activity.type === 'restaurant' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_r.png' :
+                                 activity.type === 'transport' ? 'https://webapi.amap.com/theme/v1.3/markers/n/mark_g.png' :
+                                 'https://webapi.amap.com/theme/v1.3/markers/n/mark_p.png',
+                          imageOffset: new AMap.Pixel(0, 0),
+                          imageSize: new AMap.Size(28, 28),
+                        }),
+                        label: {
+                          content: `${index + 1}. ${activity.name}`,
+                          direction: 'right',
+                        },
+                      });
+                      markers.push(marker);
+                    }
+                  }
+                  resolve();
+                });
+              } else {
+                resolve();
+              }
+            });
+            geocodePromises.push(activityPromise);
           });
 
-          // Add markers for activities with coordinates
-          activities.forEach((activity) => {
-            if (activity.coordinates && activity.coordinates.lng && activity.coordinates.lat) {
-              new AMap.Marker({
-                position: [activity.coordinates.lng, activity.coordinates.lat],
-                title: activity.name,
-                map: mapInstance.current,
-              });
-            } else if (activity.location) {
-              // Geocode activity location
-              geocoder.getLocation(activity.location, (status: string, result: any) => {
-                if (status === 'complete' && result.geocodes && result.geocodes.length > 0) {
-                  const location = result.geocodes[0].location;
-                  if (location && location.lng && location.lat) {
-                    new AMap.Marker({
-                      position: [location.lng, location.lat],
-                      title: activity.name,
-                      map: mapInstance.current,
-                    });
+          // Wait for all geocoding to complete, then draw route
+          Promise.all(geocodePromises).then(() => {
+            // Sort activity points by index to maintain order
+            activityPoints.sort((a, b) => a.index - b.index);
+
+            // Update map center if we have activity points
+            if (activityPoints.length > 0) {
+              // Fit map bounds to show all markers
+              if (markers.length > 0) {
+                const bounds = new AMap.Bounds();
+                markers.forEach(marker => {
+                  bounds.extend(marker.getPosition());
+                });
+                // Add some padding
+                mapInstance.current.setBounds(bounds, false, [20, 20, 20, 20]);
+              } else if (destinationLocation) {
+                mapInstance.current.setCenter([destinationLocation.lng, destinationLocation.lat]);
+                mapInstance.current.setZoom(13);
+              }
+            } else if (destinationLocation) {
+              mapInstance.current.setCenter([destinationLocation.lng, destinationLocation.lat]);
+              mapInstance.current.setZoom(13);
+            }
+
+            // Draw route between activity points in sequence
+            if (activityPoints.length < 2) {
+              console.warn('Not enough activity points to draw route');
+              return;
+            }
+
+            // Draw route between points using Driving service
+            const driving = new AMap.Driving({
+              map: mapInstance.current,
+              panel: null, // Don't show route panel
+              hideMarkers: true, // We already have custom markers
+            });
+
+            // Build route points in order
+            const routePoints = activityPoints.map(p => ({ lng: p.lng, lat: p.lat }));
+
+            // If we have more than 2 points, use waypoints
+            if (routePoints.length === 2) {
+              // Simple two-point route
+              driving.search(
+                new AMap.LngLat(routePoints[0].lng, routePoints[0].lat),
+                new AMap.LngLat(routePoints[1].lng, routePoints[1].lat),
+                {},
+                (status: string, result: any) => {
+                  if (status === 'complete') {
+                    console.log('Route planning complete');
+                    // Route is automatically drawn on the map by AMap.Driving
+                  } else {
+                    console.warn('Route planning failed:', status);
+                    // Fallback: draw simple polyline
+                    drawSimpleRoute(routePoints);
                   }
                 }
-              });
+              );
+            } else {
+              // Multiple points: use waypoints
+              const waypoints = routePoints.slice(1, -1).map(p => new AMap.LngLat(p.lng, p.lat));
+              
+              driving.search(
+                new AMap.LngLat(routePoints[0].lng, routePoints[0].lat),
+                new AMap.LngLat(routePoints[routePoints.length - 1].lng, routePoints[routePoints.length - 1].lat),
+                {
+                  waypoints: waypoints,
+                },
+                (status: string, result: any) => {
+                  if (status === 'complete') {
+                    console.log('Route planning complete with waypoints');
+                    // Route is automatically drawn on the map by AMap.Driving
+                  } else {
+                    console.warn('Route planning failed:', status);
+                    // Fallback: draw simple polyline
+                    drawSimpleRoute(routePoints);
+                  }
+                }
+              );
             }
           });
         });
