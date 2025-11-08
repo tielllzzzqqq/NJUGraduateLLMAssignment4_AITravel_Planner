@@ -66,4 +66,10 @@ jobs:
           # 使用本地缓存代替注册表缓存
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # 前端构建参数（从 GitHub Secrets 获取）
+          build-args: |
+            VITE_API_URL=${{ secrets.VITE_API_URL || 'http://localhost:3000/api' }}
+            VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
+            VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
+            VITE_AMAP_KEY=${{ secrets.VITE_AMAP_KEY }}
 

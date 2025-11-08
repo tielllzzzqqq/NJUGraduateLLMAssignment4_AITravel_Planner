@@ -143,6 +143,40 @@ docker logs travel-planner | grep -E "Supabase|LLM|Server is running"
    - 如果需要更新，需要重新构建镜像并推送到仓库
    - 或者在运行时通过环境变量覆盖（需要修改前端代码支持）
 
+### 前端环境变量配置（重要）
+
+**问题**：前端环境变量（`VITE_*`）需要在**构建 Docker 镜像时**传入，不能在运行时修改。
+
+#### 如果使用 GitHub Actions 构建的镜像
+
+需要在 GitHub Secrets 中配置以下前端环境变量：
+- `VITE_API_URL` - API 地址（例如：`http://localhost:3000/api`）
+- `VITE_SUPABASE_URL` - Supabase URL
+- `VITE_SUPABASE_ANON_KEY` - Supabase Anon Key  
+- `VITE_AMAP_KEY` - 高德地图 API Key
+
+#### 如果本地构建镜像
+
+使用提供的构建脚本：
+
+```bash
+# 确保 frontend/.env 文件存在并配置正确
+# 或确保根目录 .env 包含前端环境变量
+./build-docker-local.sh
+```
+
+或手动构建：
+
+```bash
+docker build \
+  --build-arg VITE_API_URL="http://localhost:3000/api" \
+  --build-arg VITE_SUPABASE_URL="https://your-project.supabase.co" \
+  --build-arg VITE_SUPABASE_ANON_KEY="your-anon-key" \
+  --build-arg VITE_AMAP_KEY="your-amap-key" \
+  -t travel-planner:latest \
+  .
+```
+
 ## 步骤 4: 运行容器
 
 ### 方式 1: 使用 Docker 命令
@@ -286,6 +320,45 @@ docker run -d \
 ```
 
 或者使用 `docker-compose.prod.yml`（已包含 `platform: linux/amd64` 配置）。
+
+### Q: 前端页面无法打开或显示空白？
+
+**A: 检查以下几点**
+
+1. **前端环境变量是否正确构建**
+   - 前端环境变量需要在构建时传入，不是运行时
+   - 检查构建日志中是否有环境变量相关的错误
+   - 如果使用 GitHub Actions 构建，确保配置了 `VITE_*` secrets
+
+2. **检查浏览器控制台**
+   - 打开浏览器开发者工具（F12）
+   - 查看 Console 标签是否有 JavaScript 错误
+   - 查看 Network 标签，检查 API 请求是否失败
+
+3. **检查 API 地址配置**
+   - 前端使用的 API 地址是 `VITE_API_URL`
+   - 如果前端构建时 `VITE_API_URL` 是 `http://localhost:3001/api`，但容器运行在 3000 端口，会有问题
+   - 解决方案：重新构建镜像，设置 `VITE_API_URL=http://localhost:3000/api`
+
+4. **检查静态文件服务**
+   ```bash
+   # 检查容器中的静态文件
+   docker exec travel-planner ls -la /app/public
+   
+   # 检查 HTML 文件
+   curl http://localhost:3000
+   
+   # 检查 JavaScript 文件
+   curl http://localhost:3000/assets/index-*.js
+   ```
+
+5. **重新构建镜像（如果环境变量不正确）**
+   ```bash
+   # 使用本地构建脚本
+   ./build-docker-local.sh
+   
+   # 或使用 GitHub Actions（需要在 Secrets 中配置前端环境变量）
+   ```
 
 ### Q: 容器无法启动怎么办？
 

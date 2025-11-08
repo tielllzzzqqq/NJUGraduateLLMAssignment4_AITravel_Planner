@@ -14,6 +14,20 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
+
+# Build arguments for frontend environment variables
+# These will be available at build time via --build-arg
+ARG VITE_API_URL
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+ARG VITE_AMAP_KEY
+
+# Set environment variables for build
+ENV VITE_API_URL=${VITE_API_URL}
+ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+ENV VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+ENV VITE_AMAP_KEY=${VITE_AMAP_KEY}
+
 RUN npm run build
 
 # Stage 3: Production runtime
