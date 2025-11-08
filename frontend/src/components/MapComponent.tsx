@@ -105,6 +105,28 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
         });
 
         console.log('MapComponent: Map initialized');
+        
+        // Wait for map to be ready before geocoding
+        mapInstance.current.on('complete', () => {
+          console.log('MapComponent: Map ready event fired');
+          initializeGeocoding();
+        });
+        
+        // Also try immediate initialization if map is already ready
+        if (mapInstance.current.getZoom) {
+          console.log('MapComponent: Map seems ready, initializing geocoding');
+          // Use setTimeout to ensure map is fully initialized
+          setTimeout(() => {
+            initializeGeocoding();
+          }, 500);
+        } else {
+          // Fallback: initialize after a delay
+          setTimeout(() => {
+            initializeGeocoding();
+          }, 1000);
+        }
+        
+        function initializeGeocoding() {
 
         // Store markers and route points (ordered by activity sequence)
         const markers: any[] = [];
@@ -132,20 +154,29 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
           mapInstance.current.add(polyline);
         };
 
-        // Load plugins and initialize map
-        AMap.plugin(['AMap.Geocoder', 'AMap.Driving'], () => {
-          console.log('MapComponent: Plugins loaded, creating Geocoder');
-          const geocoder = new AMap.Geocoder({
-            city: '全国', // 城市设为全国，默认会进行全国范围搜索
-            radius: 1000, // 搜索半径，单位米
-          });
-          console.log('MapComponent: Geocoder created:', geocoder);
-          
-          // Test geocoder is working
-          if (!geocoder || typeof geocoder.getLocation !== 'function') {
-            console.error('MapComponent: Geocoder is not properly initialized');
-            return;
-          }
+          // Load plugins and initialize map
+          AMap.plugin(['AMap.Geocoder', 'AMap.Driving'], () => {
+            console.log('MapComponent: Plugins loaded, creating Geocoder');
+            
+            try {
+              const geocoder = new AMap.Geocoder({
+                city: '全国', // 城市设为全国，默认会进行全国范围搜索
+                radius: 1000, // 搜索半径，单位米
+              });
+              console.log('MapComponent: Geocoder created:', geocoder);
+              
+              // Test geocoder is working
+              if (!geocoder || typeof geocoder.getLocation !== 'function') {
+                console.error('MapComponent: Geocoder is not properly initialized');
+                return;
+              }
+              
+              if (!mapInstance.current) {
+                console.error('MapComponent: Map instance is null');
+                return;
+              }
+              
+              console.log('MapComponent: Starting geocoding for destination and activities');
 
           // Geocode all locations and then draw route
           const geocodePromises: Promise<void>[] = [];
@@ -484,7 +515,8 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
               );
             }
           });
-        });
+          });
+        }
       } catch (error: any) {
         console.error('Map initialization error:', error);
         if (mapContainer.current) {
