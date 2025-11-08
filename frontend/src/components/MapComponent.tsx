@@ -30,6 +30,17 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
       activities: activities.map(a => ({ name: a.name, location: a.location, hasCoordinates: !!(a.coordinates?.lat && a.coordinates?.lng) }))
     });
 
+    // Clean up previous map instance
+    if (mapInstance.current) {
+      try {
+        mapInstance.current.clearMap();
+        mapInstance.current.destroy();
+      } catch (e) {
+        console.warn('Error cleaning up previous map:', e);
+      }
+      mapInstance.current = null;
+    }
+
     const initMap = async () => {
       const amapKey = import.meta.env.VITE_AMAP_KEY;
       
@@ -202,53 +213,81 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                 
                 console.log('MapComponent: Starting geocoding for destination and activities');
                 
-                // Helper function to geocode using PlaceSearch (primary method, more reliable)
-                const geocodeWithPlaceSearch = (address: string, searchName?: string): Promise<{ lng: number; lat: number } | null> => {
+                // Helper function to geocode using HTTP API (more reliable than SDK plugins)
+                const geocodeWithHTTP = (address: string, searchName?: string): Promise<{ lng: number; lat: number } | null> => {
                   return new Promise((resolve) => {
-                    // Try with full address first, then with name if provided
-                    const queries = searchName ? [`${destination}${searchName}`, `${destination}${address}`, address] : [address];
+                    const amapKey = import.meta.env.VITE_AMAP_KEY;
+                    if (!amapKey) {
+                      console.error('MapComponent: AMap API Key not found');
+                      resolve(null);
+                      return;
+                    }
+
+                    // Try multiple queries: name+city, address, name only
+                    const queries = searchName 
+                      ? [`${destination}${searchName}`, `${destination}${address}`, searchName, address]
+                      : [`${destination}${address}`, address];
                     
                     const tryNext = (index: number) => {
                       if (index >= queries.length) {
-                        console.warn(`MapComponent: PlaceSearch failed for all queries of "${address}"`);
+                        console.warn(`MapComponent: HTTP geocoding failed for all queries of "${address}"`);
                         resolve(null);
                         return;
                       }
                       
                       const query = queries[index];
-                      console.log(`MapComponent: Trying PlaceSearch for "${query}" (${index + 1}/${queries.length})`);
+                      console.log(`MapComponent: Trying HTTP geocoding for "${query}" (${index + 1}/${queries.length})`);
                       
-                      // Shorter timeout - 2 seconds
-                      const timeoutId = setTimeout(() => {
-                        console.warn(`MapComponent: PlaceSearch timeout for "${query}", trying next...`);
-                        tryNext(index + 1);
-                      }, 2000);
+                      // Use Geocoding API (地理编码API)
+                      const geocodeUrl = `https://restapi.amap.com/v3/geocode/geo?key=${amapKey}&address=${encodeURIComponent(query)}&city=${encodeURIComponent(destination || '')}`;
                       
-                      try {
-                        placeSearch.search(query, (status: string, result: any) => {
-                          clearTimeout(timeoutId);
-                          console.log(`MapComponent: PlaceSearch callback for "${query}" - status:`, status);
+                      fetch(geocodeUrl)
+                        .then(response => response.json())
+                        .then(data => {
+                          console.log(`MapComponent: HTTP geocoding response for "${query}":`, data);
                           
-                          if (status === 'complete' && result && result.poiList && result.poiList.pois && result.poiList.pois.length > 0) {
-                            const poi = result.poiList.pois[0];
-                            if (poi.location) {
-                              const location = { lng: poi.location.lng, lat: poi.location.lat };
-                              console.log(`MapComponent: PlaceSearch found location for "${query}":`, location);
-                              resolve(location);
-                            } else {
-                              console.warn(`MapComponent: PlaceSearch POI has no location, trying next...`);
-                              tryNext(index + 1);
+                          if (data.status === '1' && data.geocodes && data.geocodes.length > 0) {
+                            const locationStr = data.geocodes[0].location;
+                            const [lng, lat] = locationStr.split(',').map(Number);
+                            if (lng && lat) {
+                              console.log(`MapComponent: HTTP geocoding found location for "${query}":`, { lng, lat });
+                              resolve({ lng, lat });
+                              return;
                             }
-                          } else {
-                            console.warn(`MapComponent: PlaceSearch failed for "${query}" - status:`, status);
-                            tryNext(index + 1);
                           }
+                          
+                          // If geocoding fails, try POI search
+                          console.log(`MapComponent: Geocoding failed, trying POI search for "${query}"`);
+                          const poiUrl = `https://restapi.amap.com/v3/place/text?key=${amapKey}&keywords=${encodeURIComponent(query)}&city=${encodeURIComponent(destination || '')}&citylimit=true&offset=1&page=1&extensions=base`;
+                          
+                          fetch(poiUrl)
+                            .then(response => response.json())
+                            .then(poiData => {
+                              console.log(`MapComponent: POI search response for "${query}":`, poiData);
+                              
+                              if (poiData.status === '1' && poiData.pois && poiData.pois.length > 0) {
+                                const poi = poiData.pois[0];
+                                const locationStr = poi.location;
+                                const [lng, lat] = locationStr.split(',').map(Number);
+                                if (lng && lat) {
+                                  console.log(`MapComponent: POI search found location for "${query}":`, { lng, lat });
+                                  resolve({ lng, lat });
+                                  return;
+                                }
+                              }
+                              
+                              // Try next query
+                              tryNext(index + 1);
+                            })
+                            .catch(error => {
+                              console.error(`MapComponent: POI search error for "${query}":`, error);
+                              tryNext(index + 1);
+                            });
+                        })
+                        .catch(error => {
+                          console.error(`MapComponent: HTTP geocoding error for "${query}":`, error);
+                          tryNext(index + 1);
                         });
-                      } catch (error) {
-                        clearTimeout(timeoutId);
-                        console.error(`MapComponent: Error in PlaceSearch for "${query}":`, error);
-                        tryNext(index + 1);
-                      }
                     };
                     
                     tryNext(0);
@@ -258,63 +297,11 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                 // Geocode all locations and then draw route
                 const geocodePromises: Promise<void>[] = [];
                 
-                // Helper function to geocode - try PlaceSearch first (faster and more reliable)
+                // Helper function to geocode - use HTTP API (most reliable)
                 const geocodeLocation = (address: string, activityName?: string): Promise<{ lng: number; lat: number } | null> => {
-                  return new Promise((resolve) => {
-                    console.log(`MapComponent: Geocoding "${address}"${activityName ? ` (name: ${activityName})` : ''}`);
-                    
-                    // Try PlaceSearch first (usually faster and more reliable)
-                    geocodeWithPlaceSearch(address, activityName).then((location) => {
-                      if (location) {
-                        resolve(location);
-                        return;
-                      }
-                      
-                      // If PlaceSearch fails, try Geocoder (if available)
-                      if (!geocoder || typeof geocoder.getLocation !== 'function') {
-                        console.warn(`MapComponent: Geocoder not available, skipping for "${address}"`);
-                        resolve(null);
-                        return;
-                      }
-                      
-                      console.log(`MapComponent: PlaceSearch failed, trying Geocoder for "${address}"`);
-                      let callbackExecuted = false;
-                      const timeoutId = setTimeout(() => {
-                        if (!callbackExecuted) {
-                          callbackExecuted = true;
-                          console.warn(`MapComponent: Geocoder timeout for "${address}"`);
-                          resolve(null);
-                        }
-                      }, 2000); // Short timeout - 2 seconds
-                    
-                      try {
-                        geocoder.getLocation(address, (status: string, result: any) => {
-                          if (callbackExecuted) return;
-                          callbackExecuted = true;
-                          clearTimeout(timeoutId);
-                          
-                          if (status === 'complete' && result && result.geocodes && result.geocodes.length > 0) {
-                            const location = result.geocodes[0].location;
-                            if (location && typeof location.lng === 'number' && typeof location.lat === 'number') {
-                              console.log(`MapComponent: Geocoder found location for "${address}":`, location);
-                              resolve({ lng: location.lng, lat: location.lat });
-                            } else {
-                              resolve(null);
-                            }
-                          } else {
-                            resolve(null);
-                          }
-                        });
-                      } catch (error) {
-                        if (!callbackExecuted) {
-                          callbackExecuted = true;
-                          clearTimeout(timeoutId);
-                          console.error(`MapComponent: Error in Geocoder for "${address}":`, error);
-                          resolve(null);
-                        }
-                      }
-                    });
-                  });
+                  console.log(`MapComponent: Geocoding "${address}"${activityName ? ` (name: ${activityName})` : ''}`);
+                  // Use HTTP API directly (more reliable than SDK plugins)
+                  return geocodeWithHTTP(address, activityName);
                 };
 
                 // First, geocode destination (map center already set, just update if we get better coordinates)
