@@ -55,14 +55,24 @@ const authenticate = async (req: express.Request, res: express.Response, next: e
 // Create travel plan
 router.post('/plan', authenticate, async (req, res) => {
   try {
-    const { destination, days, budget, travelers, preferences, voiceInput } = req.body;
+    const { destination, days, budget, travelers, startDate, preferences, voiceInput } = req.body;
     const user = (req as any).user;
 
-    console.log('Creating travel plan:', { destination, days, budget, travelers, userId: user.id });
+    console.log('Creating travel plan:', { destination, days, budget, travelers, startDate, userId: user.id });
 
     if (!destination || !days || !budget || !travelers) {
       console.error('Missing required fields:', { destination, days, budget, travelers });
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Validate startDate if provided
+    let validStartDate = startDate;
+    if (startDate) {
+      const date = new Date(startDate);
+      if (isNaN(date.getTime())) {
+        console.warn('Invalid startDate provided, using today:', startDate);
+        validStartDate = undefined;
+      }
     }
 
     // Generate travel plan using LLM
@@ -74,6 +84,7 @@ router.post('/plan', authenticate, async (req, res) => {
         days: parseInt(days),
         budget: parseFloat(budget),
         travelers: parseInt(travelers),
+        startDate: validStartDate,
         preferences: preferences || voiceInput || undefined
       });
       console.log('LLM plan generated successfully');

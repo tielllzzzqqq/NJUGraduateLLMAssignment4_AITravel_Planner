@@ -5,6 +5,7 @@ interface TravelRequest {
   days: number;
   budget: number;
   travelers: number;
+  startDate?: string; // Start date in YYYY-MM-DD format
   preferences?: string;
 }
 
@@ -190,6 +191,22 @@ export class LLMService {
   }
 
   private buildTravelPrompt(request: TravelRequest): string {
+    // Calculate start date - use provided startDate or today
+    const startDate = request.startDate ? new Date(request.startDate) : new Date();
+    const year = startDate.getFullYear();
+    const month = String(startDate.getMonth() + 1).padStart(2, '0');
+    const day = String(startDate.getDate()).padStart(2, '0');
+    const startDateStr = `${year}-${month}-${day}`;
+
+    // Generate date examples for the prompt
+    const dateExamples = [];
+    for (let i = 0; i < Math.min(request.days, 3); i++) {
+      const date = new Date(startDate);
+      date.setDate(date.getDate() + i);
+      const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      dateExamples.push(`"day": ${i + 1}, "date": "${dateStr}"`);
+    }
+
     // Simplified prompt for faster response
     return `请为以下旅行需求生成旅行计划，返回JSON格式：
 
@@ -197,14 +214,14 @@ export class LLMService {
 天数：${request.days}天
 预算：${request.budget}元
 人数：${request.travelers}人
+出发日期：${startDateStr}
 偏好：${request.preferences || '无'}
 
 返回JSON格式：
 {
   "itinerary": [
     {
-      "day": 1,
-      "date": "2024-01-01",
+      ${dateExamples[0] || `"day": 1, "date": "${startDateStr}"`},
       "activities": [
         {
           "time": "09:00",
@@ -224,7 +241,11 @@ export class LLMService {
   }
 }
 
-要求：每天3-4个活动，费用合理，JSON格式正确。`;
+要求：
+1. 日期从 ${startDateStr} 开始，按天数递增
+2. 每天3-4个活动，费用合理
+3. JSON格式正确
+4. 日期格式为 YYYY-MM-DD（例如：${startDateStr}）`;
   }
 
   private parseTravelPlan(content: string, request: TravelRequest): TravelPlan {
@@ -303,25 +324,44 @@ export class LLMService {
       return this.generateFallbackPlan(request);
     }
 
+    // Calculate start date - use provided startDate or today
+    const startDate = request.startDate ? new Date(request.startDate) : new Date();
+    
+    // Helper function to format date as YYYY-MM-DD
+    const formatDate = (date: Date): string => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
     return {
-      itinerary: plan.itinerary.map((day: any, index: number) => ({
-        day: day.day || index + 1,
-        date: day.date || new Date(Date.now() + index * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        activities: Array.isArray(day.activities) 
-          ? day.activities.map((activity: any) => ({
-              ...activity,
-              // Normalize activity type
-              type: activity.type === 'dining' ? 'restaurant' : 
-                    (['transport', 'attraction', 'restaurant', 'accommodation'].includes(activity.type) 
-                      ? activity.type 
-                      : 'attraction'),
-              // Ensure location is detailed enough for geocoding
-              location: activity.location && activity.location.trim() !== '' 
-                ? activity.location 
-                : `${request.destination}${activity.name}`
-            }))
-          : []
-      })),
+      itinerary: plan.itinerary.map((day: any, index: number) => {
+        // Calculate the correct date based on start date
+        const dayDate = new Date(startDate);
+        dayDate.setDate(dayDate.getDate() + index);
+        const expectedDate = formatDate(dayDate);
+        
+        return {
+          day: day.day || index + 1,
+          // Use the date from LLM if it's valid, otherwise use calculated date
+          date: day.date && day.date.match(/^\d{4}-\d{2}-\d{2}$/) ? day.date : expectedDate,
+          activities: Array.isArray(day.activities) 
+            ? day.activities.map((activity: any) => ({
+                ...activity,
+                // Normalize activity type
+                type: activity.type === 'dining' ? 'restaurant' : 
+                      (['transport', 'attraction', 'restaurant', 'accommodation'].includes(activity.type) 
+                        ? activity.type 
+                        : 'attraction'),
+                // Ensure location is detailed enough for geocoding
+                location: activity.location && activity.location.trim() !== '' 
+                  ? activity.location 
+                  : `${request.destination}${activity.name}`
+              }))
+            : []
+        };
+      }),
       summary: plan.summary || {
         totalEstimatedCost: request.budget,
         highlights: [],
@@ -332,7 +372,16 @@ export class LLMService {
 
   private generateFallbackPlan(request: TravelRequest): TravelPlan {
     const itinerary = [];
-    const startDate = new Date();
+    // Use provided startDate or default to today
+    const startDate = request.startDate ? new Date(request.startDate) : new Date();
+    
+    // Helper function to format date as YYYY-MM-DD
+    const formatDate = (date: Date): string => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
     
     for (let i = 0; i < request.days; i++) {
       const date = new Date(startDate);
@@ -352,7 +401,7 @@ export class LLMService {
       
       itinerary.push({
         day: i + 1,
-        date: date.toISOString().split('T')[0],
+        date: formatDate(date),
         activities: [
           {
             time: '09:00',

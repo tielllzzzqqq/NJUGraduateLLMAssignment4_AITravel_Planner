@@ -5,10 +5,20 @@ import VoiceInput from '../components/VoiceInput';
 import '../App.css';
 
 export default function CreatePlan() {
+  // Get today's date in YYYY-MM-DD format
+  const getTodayDate = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const [destination, setDestination] = useState('');
   const [days, setDays] = useState('');
   const [budget, setBudget] = useState('');
   const [travelers, setTravelers] = useState('');
+  const [startDate, setStartDate] = useState(getTodayDate()); // Default to today
   const [preferences, setPreferences] = useState('');
   const [voiceText, setVoiceText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -169,6 +179,7 @@ export default function CreatePlan() {
         days: parseInt(days),
         budget: parseFloat(budget),
         travelers: parseInt(travelers),
+        startDate,
         preferences: preferences || voiceText || undefined,
       });
 
@@ -177,6 +188,7 @@ export default function CreatePlan() {
         days: parseInt(days),
         budget: parseFloat(budget),
         travelers: parseInt(travelers),
+        startDate,
         preferences: preferences || voiceText || undefined,
         voiceInput: voiceText || undefined,
       });
@@ -267,6 +279,17 @@ export default function CreatePlan() {
                 required
                 min="1"
                 placeholder="例如：2"
+              />
+            </div>
+
+            <div className="input-group">
+              <label>出发日期 *</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                required
+                min={getTodayDate()}
               />
             </div>
           </div>
