@@ -9,6 +9,7 @@ on:
     branches:
       - main
       - master
+  workflow_dispatch: # Allow manual triggering
 
 env:
   REGISTRY: registry.cn-hangzhou.aliyuncs.com
@@ -17,6 +18,8 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    # Skip job if Docker registry secrets are not configured
+    if: ${{ secrets.ALIBABA_CLOUD_USERNAME != '' && secrets.ALIBABA_CLOUD_PASSWORD != '' && secrets.ALIBABA_CLOUD_NAMESPACE != '' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
