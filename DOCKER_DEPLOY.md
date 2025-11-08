@@ -1,6 +1,8 @@
 # Docker 镜像部署指南
 
-本指南说明如何从阿里云容器镜像服务拉取 Docker 镜像并运行应用。
+本指南说明如何使用 GitHub Actions 构建的 Docker 镜像部署应用。
+
+> **注意**：本项目使用 GitHub Actions 自动构建 Docker 镜像并推送到阿里云容器镜像服务。本地构建相关脚本和文档已移除，仅保留 GitHub Actions 方案。
 
 ## 前提条件
 
