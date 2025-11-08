@@ -19,8 +19,16 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     # Skip job if Docker registry secrets are not configured
+    # This prevents authentication errors when secrets are not set
     if: ${{ secrets.ALIBABA_CLOUD_USERNAME != '' && secrets.ALIBABA_CLOUD_PASSWORD != '' && secrets.ALIBABA_CLOUD_NAMESPACE != '' }}
     steps:
+      - name: Check Docker secrets
+        run: |
+          echo "Checking if Docker registry secrets are configured..."
+          if [ -z "${{ secrets.ALIBABA_CLOUD_USERNAME }}" ] || [ -z "${{ secrets.ALIBABA_CLOUD_PASSWORD }}" ] || [ -z "${{ secrets.ALIBABA_CLOUD_NAMESPACE }}" ]; then
+            echo "Docker registry secrets are not configured. Skipping Docker build."
+            exit 0
+          fi
       - name: Checkout code
         uses: actions/checkout@v3
 
