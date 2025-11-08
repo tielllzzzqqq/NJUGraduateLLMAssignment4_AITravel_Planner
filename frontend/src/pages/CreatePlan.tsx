@@ -280,7 +280,21 @@ export default function CreatePlan() {
             />
           </div>
 
-          {error && <div className="error">{error}</div>}
+          {error && (
+            <div className="error" style={{ 
+              whiteSpace: 'pre-line', 
+              lineHeight: '1.6',
+              padding: '15px',
+              marginTop: '15px',
+              background: '#fee',
+              border: '1px solid #fcc',
+              borderRadius: '8px',
+              color: '#c33'
+            }}>
+              <strong>错误：</strong>
+              <div style={{ marginTop: '8px' }}>{error}</div>
+            </div>
+          )}
 
           <button 
             type="submit" 

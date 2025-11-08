@@ -50,6 +50,18 @@ export class LLMService {
     // 默认使用中国地域，如需使用新加坡地域，使用：https://dashscope-intl.aliyuncs.com/compatible-mode/v1
     this.baseUrl = process.env.DASHSCOPE_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
     this.model = process.env.DASHSCOPE_MODEL || 'qwen-plus';
+    
+    // Log configuration status (without exposing full API key)
+    console.log('LLM Service Configuration:', {
+      apiKeySet: !!this.apiKey,
+      apiKeyPrefix: this.apiKey ? `${this.apiKey.substring(0, 8)}...` : 'NOT SET',
+      baseUrl: this.baseUrl,
+      model: this.model
+    });
+    
+    if (!this.apiKey) {
+      console.warn('⚠️  DASHSCOPE_API_KEY is not configured. Please set it in .env file.');
+    }
   }
 
   async generateTravelPlan(request: TravelRequest): Promise<TravelPlan> {
@@ -119,37 +131,57 @@ export class LLMService {
         return this.parseTravelPlan(content, request);
       } catch (error: any) {
         lastError = error;
+        
+        // Extract detailed error information
+        const errorStatus = error.response?.status;
+        const errorData = error.response?.data;
+        const errorMessage = errorData?.error?.message || errorData?.message || error.message;
+        
         console.error(`LLM API Error (attempt ${attempt + 1}/${maxRetries + 1}):`, {
-          message: error.message,
-          status: error.response?.status,
+          message: errorMessage,
+          status: errorStatus,
           statusText: error.response?.statusText,
           code: error.code,
-          data: error.response?.data,
+          data: errorData,
+          apiKey: this.apiKey ? `${this.apiKey.substring(0, 8)}...` : 'NOT SET',
+          baseUrl: this.baseUrl,
+          model: this.model,
           config: {
             url: error.config?.url,
             method: error.config?.method
           }
         });
         
-        // Don't retry for authentication errors
-        if (error.response?.status === 401) {
-          throw new Error('API Key authentication failed. Please check your DASHSCOPE_API_KEY');
-        } else if (error.response?.status === 429) {
-          throw new Error('API rate limit exceeded. Please try again later');
+        // Don't retry for authentication/authorization errors
+        if (errorStatus === 401) {
+          throw new Error('API Key认证失败。请检查您的 DASHSCOPE_API_KEY 是否正确配置，确保API Key有效且未过期。');
+        } else if (errorStatus === 403) {
+          // 403 Forbidden - Access denied
+          const detailedMsg = errorMessage?.includes('Access denied') || errorMessage?.includes('account is in good standing')
+            ? 'API访问被拒绝。请检查：1) API Key是否正确；2) 账户余额是否充足；3) 是否有权限使用该模型；4) 账户状态是否正常。'
+            : `API访问被拒绝: ${errorMessage}`;
+          throw new Error(detailedMsg);
+        } else if (errorStatus === 429) {
+          throw new Error('API请求频率超限，请稍后再试。');
+        } else if (errorStatus === 400) {
+          throw new Error(`API请求参数错误: ${errorMessage || '请检查请求参数格式'}`);
+        } else if (errorStatus === 404) {
+          throw new Error(`模型不存在或API端点错误。请检查模型名称(${this.model})和API地址(${this.baseUrl})是否正确。`);
         }
         
         // Retry on timeout or network errors
-        if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT' || error.message === 'Network Error') {
+        if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT' || error.message === 'Network Error' || error.code === 'ECONNRESET') {
           if (attempt < maxRetries) {
             console.log('Timeout/network error, will retry...');
             continue; // Retry
           } else {
-            throw new Error('Request timeout after retries. The API took too long to respond. Please try again or check your network connection.');
+            throw new Error('请求超时。API响应时间过长，请检查网络连接或稍后重试。');
           }
         }
         
         // For other errors, don't retry
-        throw new Error('Failed to generate travel plan: ' + (error.response?.data?.error?.message || error.message));
+        const friendlyMessage = errorMessage || error.message || '未知错误';
+        throw new Error(`生成旅行计划失败: ${friendlyMessage}`);
       }
     }
     

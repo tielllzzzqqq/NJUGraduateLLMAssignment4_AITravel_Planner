@@ -79,9 +79,28 @@ router.post('/plan', authenticate, async (req, res) => {
       console.log('LLM plan generated successfully');
     } catch (llmError: any) {
       console.error('LLM service error:', llmError);
-      return res.status(500).json({ 
-        error: 'Failed to generate travel plan: ' + (llmError.message || 'Unknown error'),
-        details: llmError.response?.data || null
+      
+      // Extract error details
+      const errorMessage = llmError.message || '未知错误';
+      const errorDetails = llmError.response?.data || null;
+      const statusCode = llmError.response?.status || 500;
+      
+      // Provide user-friendly error message
+      let userMessage = errorMessage;
+      
+      // Check for specific error cases
+      if (errorMessage.includes('API访问被拒绝') || errorMessage.includes('Access denied')) {
+        userMessage = 'API访问被拒绝。可能的原因：\n1. API Key无效或已过期\n2. 账户余额不足\n3. 没有权限使用该模型\n4. 账户状态异常\n\n请检查您的 DASHSCOPE_API_KEY 配置，并确保账户状态正常。';
+      } else if (errorMessage.includes('API Key认证失败') || errorMessage.includes('authentication')) {
+        userMessage = 'API Key认证失败。请检查您的 DASHSCOPE_API_KEY 是否正确配置在 .env 文件中。';
+      } else if (errorMessage.includes('模型不存在')) {
+        userMessage = '模型不存在或API端点错误。请检查模型名称和API地址配置。';
+      }
+      
+      return res.status(statusCode).json({ 
+        error: userMessage,
+        details: errorDetails,
+        code: statusCode
       });
     }
 
