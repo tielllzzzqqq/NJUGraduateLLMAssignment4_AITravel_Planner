@@ -488,28 +488,82 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                       if (markers.length > 0) {
                         const bounds = new AMap.Bounds();
                         let validMarkers = 0;
-                        markers.forEach(marker => {
+                        const markerPositions: Array<[number, number]> = [];
+                        
+                        markers.forEach((marker, idx) => {
                           try {
                             const pos = marker.getPosition();
                             if (pos && validateCoordinates(pos.lng, pos.lat)) {
-                              bounds.extend(pos);
+                              const coords: [number, number] = [pos.lng, pos.lat];
+                              bounds.extend(coords);
+                              markerPositions.push(coords);
                               validMarkers++;
+                              console.log(`MapComponent: Marker ${idx + 1} position: [${pos.lng}, ${pos.lat}]`);
                             } else {
-                              console.warn(`MapComponent: Invalid marker position:`, pos);
+                              console.warn(`MapComponent: Invalid marker ${idx + 1} position:`, pos);
                             }
                           } catch (e) {
-                            console.warn(`MapComponent: Error getting marker position:`, e);
+                            console.warn(`MapComponent: Error getting marker ${idx + 1} position:`, e);
                           }
                         });
                         
                         if (validMarkers > 0) {
-                          console.log(`MapComponent: Setting map bounds to show ${validMarkers} valid markers`);
-                          // Add some padding
-                          mapInstance.current.setBounds(bounds, false, [20, 20, 20, 20]);
+                          console.log(`MapComponent: Setting map view to show ${validMarkers} valid markers`);
+                          console.log(`MapComponent: Marker positions:`, markerPositions);
                           
-                          // Verify bounds
-                          const currentCenter = mapInstance.current.getCenter();
-                          console.log(`MapComponent: Map center after setBounds:`, currentCenter);
+                          // Calculate bounds center manually (more reliable than setBounds)
+                          const allLngs = markerPositions.map(p => p[0]);
+                          const allLats = markerPositions.map(p => p[1]);
+                          const minLng = Math.min(...allLngs);
+                          const maxLng = Math.max(...allLngs);
+                          const minLat = Math.min(...allLats);
+                          const maxLat = Math.max(...allLats);
+                          const centerLng = (minLng + maxLng) / 2;
+                          const centerLat = (minLat + maxLat) / 2;
+                          
+                          // Calculate zoom level based on bounds
+                          const lngDiff = maxLng - minLng;
+                          const latDiff = maxLat - minLat;
+                          const maxDiff = Math.max(lngDiff, latDiff);
+                          
+                          let zoomLevel = 13;
+                          if (maxDiff > 0.1) zoomLevel = 11;
+                          else if (maxDiff > 0.05) zoomLevel = 12;
+                          else if (maxDiff > 0.02) zoomLevel = 13;
+                          else if (maxDiff > 0.01) zoomLevel = 14;
+                          else zoomLevel = 15;
+                          
+                          console.log(`MapComponent: Calculated center: [${centerLng}, ${centerLat}], zoom: ${zoomLevel}`);
+                          
+                          // Validate calculated center
+                          if (validateCoordinates(centerLng, centerLat)) {
+                            // Set center and zoom directly (more reliable than setBounds)
+                            mapInstance.current.setCenter([centerLng, centerLat]);
+                            mapInstance.current.setZoom(zoomLevel);
+                            
+                            // Verify center was set correctly
+                            setTimeout(() => {
+                              const currentCenter = mapInstance.current.getCenter();
+                              console.log(`MapComponent: Map center after setCenter:`, currentCenter);
+                              
+                              // Double-check center is valid
+                              if (!validateCoordinates(currentCenter.lng, currentCenter.lat)) {
+                                console.error(`MapComponent: Center validation failed after setCenter!`);
+                                console.error(`MapComponent: Expected: [${centerLng}, ${centerLat}], Got: [${currentCenter.lng}, ${currentCenter.lat}]`);
+                                // Try setting again
+                                mapInstance.current.setCenter([centerLng, centerLat]);
+                                mapInstance.current.setZoom(zoomLevel);
+                              }
+                            }, 50);
+                          } else {
+                            console.error(`MapComponent: Calculated center is invalid: [${centerLng}, ${centerLat}]`);
+                            // Fallback to destination
+                            if (destinationLocation && validateCoordinates(destinationLocation.lng, destinationLocation.lat)) {
+                              console.log(`MapComponent: Falling back to destination center`);
+                              mapInstance.current.setCenter([destinationLocation.lng, destinationLocation.lat]);
+                              mapInstance.current.setZoom(13);
+                            }
+                          }
                         } else {
                           console.warn('MapComponent: No valid markers, centering on destination');
                           if (destinationLocation && validateCoordinates(destinationLocation.lng, destinationLocation.lat)) {
