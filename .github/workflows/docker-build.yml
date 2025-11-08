@@ -66,10 +66,13 @@ jobs:
           # 使用本地缓存代替注册表缓存
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          # 前端构建参数（从 GitHub Secrets 获取）
+          # 前端构建参数
+          # 注意：这些参数在构建时嵌入到前端代码中
+          # VITE_API_URL: 使用相对路径 /api（前后端在同一容器）
+          # 其他参数：从 GitHub Secrets 获取，如果未设置则为空（前端代码会处理）
           build-args: |
-            VITE_API_URL=${{ secrets.VITE_API_URL || 'http://localhost:3000/api' }}
-            VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
-            VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
-            VITE_AMAP_KEY=${{ secrets.VITE_AMAP_KEY }}
+            VITE_API_URL=/api
+            VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL || '' }}
+            VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY || '' }}
+            VITE_AMAP_KEY=${{ secrets.VITE_AMAP_KEY || '' }}
 

@@ -138,10 +138,26 @@ docker logs travel-planner | grep -E "Supabase|LLM|Server is running"
    - 在 Docker 容器中，你会看到 `ℹ️  Production mode: using environment variables from container`，这是正常的
    - 只要看到 `✅ Supabase credentials loaded successfully`，说明环境变量已正确加载
 
-4. **高德地图 API Key**：
-   - `VITE_AMAP_KEY` 在构建 Docker 镜像时已经打包进去了
-   - 如果需要更新，需要重新构建镜像并推送到仓库
-   - 或者在运行时通过环境变量覆盖（需要修改前端代码支持）
+4. **前端环境变量**：
+   - **构建时环境变量**（在 Docker 镜像构建时嵌入）：
+     - `VITE_API_URL`: 设置为 `/api`（相对路径，前后端在同一容器）
+     - `VITE_SUPABASE_URL`: 从 GitHub Secrets 获取（如果配置）
+     - `VITE_SUPABASE_ANON_KEY`: 从 GitHub Secrets 获取（如果配置）
+     - `VITE_AMAP_KEY`: 从 GitHub Secrets 获取（如果配置）
+   - **运行时环境变量**（通过 .env 文件注入）：
+     - 后端环境变量（SUPABASE_URL, DASHSCOPE_API_KEY 等）通过 `.env` 文件注入
+     - 前端环境变量在构建时已嵌入，运行时无法修改
+
+5. **前端 API URL 配置**：
+   - 在 Docker 容器中，前端使用相对路径 `/api` 访问后端
+   - 前端和后端在同一个容器中运行，通过同一个端口（3000）提供服务
+   - 后端提供静态文件服务（前端）和 API 服务
+
+6. **如果前端无法加载**：
+   - 检查浏览器控制台是否有错误
+   - 检查前端构建时是否设置了正确的环境变量
+   - 检查后端是否正确提供静态文件服务
+   - 检查 `/api` 路由是否正常工作
 
 ### 前端环境变量配置（重要）
 
