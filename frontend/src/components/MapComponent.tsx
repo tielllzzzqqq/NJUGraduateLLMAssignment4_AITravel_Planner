@@ -192,9 +192,16 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
             }, 10000); // 10 second timeout
             
             try {
-              geocoder.getLocation(destination, (status: string, result: any) => {
+              console.log('MapComponent: About to call geocoder.getLocation with destination:', destination);
+              console.log('MapComponent: Geocoder object:', geocoder);
+              console.log('MapComponent: geocoder.getLocation type:', typeof geocoder.getLocation);
+              
+              // Call getLocation
+              const result = geocoder.getLocation(destination, (status: string, result: any) => {
+                console.log('MapComponent: ===== CALLBACK EXECUTED =====');
                 clearTimeout(timeoutId);
-                console.log('MapComponent: Destination geocoding result:', status, result);
+                console.log('MapComponent: Destination geocoding callback - status:', status);
+                console.log('MapComponent: Destination geocoding callback - result:', result);
                 
                 if (status === 'complete' && result && result.geocodes && result.geocodes.length > 0) {
                   const location = result.geocodes[0].location;
