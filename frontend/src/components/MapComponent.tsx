@@ -66,8 +66,8 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
               resolve(true);
             };
             
-            // Load AMap with Geocoder and Driving plugins for route planning
-            script.src = `https://webapi.amap.com/maps?v=2.0&key=${amapKey}&plugin=AMap.Geocoder,AMap.Driving,AMap.Transfer&callback=${callbackName}`;
+            // Load AMap with Geocoder, Driving, Transfer, and PlaceSearch plugins
+            script.src = `https://webapi.amap.com/maps?v=2.0&key=${amapKey}&plugin=AMap.Geocoder,AMap.Driving,AMap.Transfer,AMap.PlaceSearch&callback=${callbackName}`;
             script.async = true;
             script.onerror = () => {
               delete (window as any)[callbackName];
@@ -176,21 +176,41 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                 const geocodeWithPlaceSearch = (address: string): Promise<{ lng: number; lat: number } | null> => {
                   return new Promise((resolve) => {
                     console.log(`MapComponent: Trying PlaceSearch for "${address}"`);
-                    placeSearch.search(address, (status: string, result: any) => {
-                      if (status === 'complete' && result && result.poiList && result.poiList.pois && result.poiList.pois.length > 0) {
-                        const poi = result.poiList.pois[0];
-                        if (poi.location) {
-                          const location = { lng: poi.location.lng, lat: poi.location.lat };
-                          console.log(`MapComponent: PlaceSearch found location for "${address}":`, location);
-                          resolve(location);
+                    
+                    // Add timeout for PlaceSearch
+                    const timeoutId = setTimeout(() => {
+                      console.warn(`MapComponent: PlaceSearch timeout for "${address}"`);
+                      resolve(null);
+                    }, 5000);
+                    
+                    try {
+                      placeSearch.search(address, (status: string, result: any) => {
+                        clearTimeout(timeoutId);
+                        console.log(`MapComponent: PlaceSearch callback for "${address}" - status:`, status, 'result:', result);
+                        
+                        if (status === 'complete' && result && result.poiList && result.poiList.pois && result.poiList.pois.length > 0) {
+                          const poi = result.poiList.pois[0];
+                          if (poi.location) {
+                            const location = { lng: poi.location.lng, lat: poi.location.lat };
+                            console.log(`MapComponent: PlaceSearch found location for "${address}":`, location);
+                            resolve(location);
+                          } else {
+                            console.warn(`MapComponent: PlaceSearch POI has no location:`, poi);
+                            resolve(null);
+                          }
                         } else {
+                          console.warn(`MapComponent: PlaceSearch failed for "${address}" - status:`, status, 'result:', result);
+                          if (status === 'error' || status === 'no_data') {
+                            console.warn(`MapComponent: PlaceSearch error may indicate API Key doesn't have PlaceSearch service enabled`);
+                          }
                           resolve(null);
                         }
-                      } else {
-                        console.warn(`MapComponent: PlaceSearch failed for "${address}":`, status);
-                        resolve(null);
-                      }
-                    });
+                      });
+                    } catch (error) {
+                      clearTimeout(timeoutId);
+                      console.error(`MapComponent: Error in PlaceSearch for "${address}":`, error);
+                      resolve(null);
+                    }
                   });
                 };
 
@@ -445,7 +465,40 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                       mapInstance.current.setCenter([destinationLocation.lng, destinationLocation.lat]);
                       mapInstance.current.setZoom(13);
                     } else {
-                      console.warn('MapComponent: No destination location and no activity points, map will show default location');
+                      console.warn('MapComponent: No destination location and no activity points');
+                      // Last resort: try to use a known city center as fallback
+                      // Common Chinese city coordinates
+                      const cityCoordinates: { [key: string]: [number, number] } = {
+                        '北京': [116.397428, 39.90923],
+                        '上海': [121.473701, 31.230416],
+                        '广州': [113.264385, 23.129112],
+                        '深圳': [114.057868, 22.543099],
+                        '杭州': [120.153576, 30.287459],
+                        '成都': [104.066541, 30.572269],
+                        '苏州': [120.585315, 31.298886],
+                        '南京': [118.796877, 32.060255],
+                        '武汉': [114.316200, 30.581000],
+                        '西安': [108.939840, 34.341270],
+                      };
+                      
+                      // Try to find city in destination name
+                      let foundCity = false;
+                      for (const [city, coords] of Object.entries(cityCoordinates)) {
+                        if (destination.includes(city)) {
+                          console.log(`MapComponent: Using fallback coordinates for city: ${city}`);
+                          mapInstance.current.setCenter(coords);
+                          mapInstance.current.setZoom(13);
+                          foundCity = true;
+                          break;
+                        }
+                      }
+                      
+                      if (!foundCity) {
+                        console.warn('MapComponent: Could not determine city, showing default location (Beijing)');
+                        // Default to Beijing
+                        mapInstance.current.setCenter([116.397428, 39.90923]);
+                        mapInstance.current.setZoom(10);
+                      }
                     }
 
                     // Draw route between activity points in sequence

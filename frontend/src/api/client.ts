@@ -31,7 +31,41 @@ apiClient.interceptors.request.use((config) => {
 // Add response interceptor for better error handling
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    if (error.response?.status === 401) {
+      // Token expired or invalid - try to refresh or redirect to login
+      console.warn('Authentication failed, attempting to refresh token...');
+      
+      // Try to refresh the session
+      try {
+        const { supabase } = await import('../App');
+        const { data: { session }, error: refreshError } = await supabase.auth.refreshSession();
+        
+        if (!refreshError && session) {
+          // Update stored token
+          localStorage.setItem('supabase.auth.token', JSON.stringify(session));
+          // Retry the original request
+          if (error.config) {
+            error.config.headers.Authorization = `Bearer ${session.access_token}`;
+            return apiClient.request(error.config);
+          }
+        } else {
+          // Refresh failed - redirect to login
+          console.error('Token refresh failed, redirecting to login');
+          localStorage.removeItem('supabase.auth.token');
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
+        }
+      } catch (refreshErr) {
+        console.error('Error refreshing token:', refreshErr);
+        localStorage.removeItem('supabase.auth.token');
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
+      }
+    }
+    
     if (error.code === 'ECONNABORTED') {
       error.message = '请求超时，请稍后重试';
     } else if (error.message === 'Network Error') {
