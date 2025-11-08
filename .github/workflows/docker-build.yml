@@ -18,24 +18,32 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    # Skip job if Docker registry secrets are not configured
-    # This prevents authentication errors when secrets are not set
-    if: ${{ secrets.ALIBABA_CLOUD_USERNAME != '' && secrets.ALIBABA_CLOUD_PASSWORD != '' && secrets.ALIBABA_CLOUD_NAMESPACE != '' }}
     steps:
-      - name: Check Docker secrets
-        run: |
-          echo "Checking if Docker registry secrets are configured..."
-          if [ -z "${{ secrets.ALIBABA_CLOUD_USERNAME }}" ] || [ -z "${{ secrets.ALIBABA_CLOUD_PASSWORD }}" ] || [ -z "${{ secrets.ALIBABA_CLOUD_NAMESPACE }}" ]; then
-            echo "Docker registry secrets are not configured. Skipping Docker build."
-            exit 0
-          fi
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Check Docker secrets configuration
+        id: check-secrets
+        run: |
+          if [ -z "${{ secrets.ALIBABA_CLOUD_USERNAME }}" ] || [ -z "${{ secrets.ALIBABA_CLOUD_PASSWORD }}" ] || [ -z "${{ secrets.ALIBABA_CLOUD_NAMESPACE }}" ]; then
+            echo "Docker registry secrets are not configured."
+            echo "Please configure the following Repository secrets:"
+            echo "  - ALIBABA_CLOUD_USERNAME"
+            echo "  - ALIBABA_CLOUD_PASSWORD"
+            echo "  - ALIBABA_CLOUD_NAMESPACE"
+            echo "See DOCKER_SETUP.md for detailed instructions."
+            echo "secrets_configured=false" >> $GITHUB_OUTPUT
+          else
+            echo "Docker registry secrets are configured."
+            echo "secrets_configured=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Set up Docker Buildx
+        if: steps.check-secrets.outputs.secrets_configured == 'true'
         uses: docker/setup-buildx-action@v2
 
       - name: Login to Alibaba Cloud Container Registry
+        if: steps.check-secrets.outputs.secrets_configured == 'true'
         uses: docker/login-action@v2
         with:
           registry: ${{ env.REGISTRY }}
@@ -43,6 +51,7 @@ jobs:
           password: ${{ secrets.ALIBABA_CLOUD_PASSWORD }}
 
       - name: Build and push Docker image
+        if: steps.check-secrets.outputs.secrets_configured == 'true'
         uses: docker/build-push-action@v4
         with:
           context: .
