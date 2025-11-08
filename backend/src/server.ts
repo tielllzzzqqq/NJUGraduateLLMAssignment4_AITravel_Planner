@@ -2,31 +2,44 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import dotenv from 'dotenv';
+import fs from 'fs';
 
-// Load environment variables from project root
-// Backend runs from backend/ directory, so .env is one level up
-// Try multiple paths to handle both dev and production modes
-const possiblePaths = [
-  path.resolve(process.cwd(), '../.env'), // From backend/ directory
-  path.resolve(__dirname, '../../.env'), // From backend/src/ (dev) or backend/dist/ (prod)
-  path.resolve(process.cwd(), '.env'), // Current directory
-];
+// Load environment variables
+// In Docker/production, environment variables are injected directly
+// In development, try to load from .env file
+const isProduction = process.env.NODE_ENV === 'production';
+const isDocker = process.env.DOCKER_CONTAINER === 'true' || fs.existsSync('/.dockerenv');
 
-let envPath = possiblePaths.find(p => {
-  try {
-    const fs = require('fs');
-    return fs.existsSync(p);
-  } catch {
-    return false;
+if (!isProduction && !isDocker) {
+  // Development mode: try to load .env file
+  const possiblePaths = [
+    path.resolve(process.cwd(), '../.env'), // From backend/ directory
+    path.resolve(__dirname, '../../.env'), // From backend/src/ (dev) or backend/dist/ (prod)
+    path.resolve(process.cwd(), '.env'), // Current directory
+  ];
+
+  let envPath = possiblePaths.find(p => {
+    try {
+      return fs.existsSync(p);
+    } catch {
+      return false;
+    }
+  });
+
+  if (envPath) {
+    const result = dotenv.config({ path: envPath });
+    if (result.error) {
+      console.warn('Failed to load .env file:', envPath);
+      console.warn('Tried paths:', possiblePaths);
+    } else {
+      console.log('✅ Loaded .env file from:', envPath);
+    }
+  } else {
+    console.log('ℹ️  No .env file found, using environment variables');
   }
-}) || possiblePaths[0]; // Default to first path
-
-const result = dotenv.config({ path: envPath });
-if (result.error) {
-  console.warn('Failed to load .env file:', envPath);
-  console.warn('Tried paths:', possiblePaths);
 } else {
-  console.log('✅ Loaded .env file from:', envPath);
+  // Production/Docker: use environment variables directly
+  console.log('ℹ️  Production mode: using environment variables from container');
 }
 
 // Import routes

@@ -36,14 +36,21 @@ docker pull --platform linux/amd64 crpi-ds0j5gxjdmixc0v8.cn-hangzhou.personal.cr
 
 ## 步骤 3: 配置环境变量
 
-创建 `.env` 文件（如果还没有）：
+### 重要说明
+
+**Docker 镜像中不包含 .env 文件**（这是正确的做法，为了安全）。环境变量通过以下方式注入到容器中：
+
+1. **使用 `docker-compose.prod.yml` 的 `env_file` 选项**（推荐）
+2. **使用 `docker run` 的 `--env-file` 参数**
+3. **直接在 docker-compose.yml 或 docker run 命令中设置环境变量**
+
+### 创建 .env 文件
+
+在**运行 Docker 容器的主机上**（不是在容器内）创建 `.env` 文件：
 
 ```bash
-# 复制示例文件（如果存在）
-# cp .env.example .env
-
-# 编辑 .env 文件
-# nano .env
+# 在项目根目录创建 .env 文件
+nano .env
 ```
 
 `.env` 文件应包含以下变量：
@@ -63,10 +70,78 @@ JWT_SECRET=your-jwt-secret
 DASHSCOPE_API_KEY=your-dashscope-api-key
 
 # 高德地图 API（前端使用，但后端也需要知道）
+# 注意：在 Docker 镜像中已经构建进去了，如果需要更新，需要重新构建镜像
 VITE_AMAP_KEY=your-amap-key
 ```
 
-> **注意**：`VITE_AMAP_KEY` 是前端环境变量，但在 Docker 镜像中已经构建进去了。如果需要更新，需要重新构建镜像。
+### 环境变量注入方式
+
+#### 方式 1: 使用 docker-compose.prod.yml（已配置）
+
+`docker-compose.prod.yml` 文件中已经配置了 `env_file: - .env`，这会将主机上的 `.env` 文件中的环境变量注入到容器中。
+
+```yaml
+services:
+  travel-planner:
+    env_file:
+      - .env  # 从主机上的 .env 文件加载环境变量
+```
+
+#### 方式 2: 使用 docker run 命令
+
+```bash
+docker run -d \
+  --name travel-planner \
+  --platform linux/amd64 \
+  -p 3000:3000 \
+  --env-file .env \  # 从主机上的 .env 文件加载
+  --restart unless-stopped \
+  crpi-ds0j5gxjdmixc0v8.cn-hangzhou.personal.cr.aliyuncs.com/aliyun_lzq/travel_planner:latest
+```
+
+#### 方式 3: 直接设置环境变量
+
+```bash
+docker run -d \
+  --name travel-planner \
+  --platform linux/amd64 \
+  -p 3000:3000 \
+  -e SUPABASE_URL=https://your-project.supabase.co \
+  -e SUPABASE_ANON_KEY=your-key \
+  -e DASHSCOPE_API_KEY=your-key \
+  # ... 其他环境变量
+  crpi-ds0j5gxjdmixc0v8.cn-hangzhou.personal.cr.aliyuncs.com/aliyun_lzq/travel_planner:latest
+```
+
+### 验证环境变量
+
+容器启动后，可以验证环境变量是否正确加载：
+
+```bash
+# 检查环境变量
+docker exec travel-planner env | grep -E "SUPABASE|DASHSCOPE|PORT|NODE_ENV"
+
+# 查看容器日志（应该显示环境变量已加载）
+docker logs travel-planner | grep -E "Supabase|LLM|Server is running"
+```
+
+### 注意事项
+
+1. **.env 文件位置**：`.env` 文件应该放在**运行 Docker 命令的目录**（通常是项目根目录），不是容器内部。
+
+2. **安全性**：
+   - ✅ `.env` 文件不会被打包到 Docker 镜像中
+   - ✅ 环境变量通过 Docker 运行时注入
+   - ✅ 确保 `.env` 文件在 `.gitignore` 中，不要提交到 Git
+
+3. **日志提示**：
+   - 在 Docker 容器中，你会看到 `ℹ️  Production mode: using environment variables from container`，这是正常的
+   - 只要看到 `✅ Supabase credentials loaded successfully`，说明环境变量已正确加载
+
+4. **高德地图 API Key**：
+   - `VITE_AMAP_KEY` 在构建 Docker 镜像时已经打包进去了
+   - 如果需要更新，需要重新构建镜像并推送到仓库
+   - 或者在运行时通过环境变量覆盖（需要修改前端代码支持）
 
 ## 步骤 4: 运行容器
 
