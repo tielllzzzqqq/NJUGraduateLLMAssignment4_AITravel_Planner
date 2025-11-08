@@ -161,9 +161,14 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
         let foundCity = false;
         for (const [city, coords] of Object.entries(cityCoordinates)) {
           if (destination.includes(city)) {
-            console.log(`MapComponent: Setting map center immediately to ${city}`);
+            console.log(`MapComponent: Setting map center immediately to ${city} at [${coords[0]}, ${coords[1]}]`);
+            // AMap uses [lng, lat] format - coords is already in this format
             mapInstance.current.setCenter(coords);
             mapInstance.current.setZoom(13);
+            
+            // Verify center was set
+            const currentCenter = mapInstance.current.getCenter();
+            console.log(`MapComponent: Map center after immediate set:`, currentCenter);
             foundCity = true;
             break;
           }
@@ -171,6 +176,8 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
         
         if (!foundCity) {
           console.log('MapComponent: City not found in preset list, keeping default center');
+          const currentCenter = mapInstance.current.getCenter();
+          console.log(`MapComponent: Current map center:`, currentCenter);
         }
 
         // Wait for map to be fully loaded, then start geocoding
@@ -249,15 +256,21 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                           
                           if (data.status === '1' && data.geocodes && data.geocodes.length > 0) {
                             const locationStr = data.geocodes[0].location;
+                            console.log(`MapComponent: Raw location string from geocoding: "${locationStr}"`);
                             const parts = locationStr.split(',');
                             if (parts.length === 2) {
-                              const lng = Number(parts[0]);
-                              const lat = Number(parts[1]);
+                              const lng = Number(parts[0].trim());
+                              const lat = Number(parts[1].trim());
+                              console.log(`MapComponent: Parsed coordinates - lng: ${lng}, lat: ${lat}`);
                               if (validateCoordinates(lng, lat)) {
                                 console.log(`MapComponent: HTTP geocoding found location for "${query}":`, { lng, lat });
                                 resolve({ lng, lat });
                                 return;
+                              } else {
+                                console.warn(`MapComponent: Coordinates failed validation: lng=${lng}, lat=${lat}`);
                               }
+                            } else {
+                              console.warn(`MapComponent: Invalid location string format: "${locationStr}"`);
                             }
                           }
                           
@@ -273,15 +286,21 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                               if (poiData.status === '1' && poiData.pois && poiData.pois.length > 0) {
                                 const poi = poiData.pois[0];
                                 const locationStr = poi.location;
+                                console.log(`MapComponent: Raw location string from POI: "${locationStr}"`);
                                 const parts = locationStr.split(',');
                                 if (parts.length === 2) {
-                                  const lng = Number(parts[0]);
-                                  const lat = Number(parts[1]);
+                                  const lng = Number(parts[0].trim());
+                                  const lat = Number(parts[1].trim());
+                                  console.log(`MapComponent: Parsed POI coordinates - lng: ${lng}, lat: ${lat}`);
                                   if (validateCoordinates(lng, lat)) {
                                     console.log(`MapComponent: POI search found location for "${query}":`, { lng, lat });
                                     resolve({ lng, lat });
                                     return;
+                                  } else {
+                                    console.warn(`MapComponent: POI coordinates failed validation: lng=${lng}, lat=${lat}`);
                                   }
+                                } else {
+                                  console.warn(`MapComponent: Invalid POI location string format: "${locationStr}"`);
                                 }
                               }
                               
@@ -318,11 +337,19 @@ const MapComponent = forwardRef<any, MapComponentProps>(({ activities, destinati
                   if (location) {
                     destinationLocation = location;
                     console.log('MapComponent: Destination location found:', destinationLocation);
+                    console.log(`MapComponent: Setting map center to [${location.lng}, ${location.lat}]`);
                     
                     // Update map center if we got coordinates
                     if (mapInstance.current) {
-                      mapInstance.current.setCenter([location.lng, location.lat]);
+                      // AMap uses [lng, lat] format
+                      const center = [location.lng, location.lat];
+                      console.log(`MapComponent: Calling setCenter with:`, center);
+                      mapInstance.current.setCenter(center);
                       mapInstance.current.setZoom(13);
+                      
+                      // Verify center was set correctly
+                      const currentCenter = mapInstance.current.getCenter();
+                      console.log(`MapComponent: Map center after setCenter:`, currentCenter);
                       console.log('MapComponent: Map center updated to destination');
                     }
                   } else {
